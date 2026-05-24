@@ -50,7 +50,16 @@ class Evidence(BaseModel):
     content: str
     extracted_claims: list[str] = Field(default_factory=list)
     related_fields: list[str] = Field(default_factory=list)
+    source_tier: Literal[
+        "official_standard",
+        "textbook",
+        "webpage",
+        "user",
+        "llm",
+        "unknown",
+    ] = "unknown"
     reliability: Literal["high", "medium", "low", "unknown"] = "unknown"
+    confidence: Literal["high", "medium", "low", "unknown"] = "unknown"
     note: str | None = None
 
 

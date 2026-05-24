@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from pwps_agent.config import Settings
 from pwps_agent.core.contracts import SearchResult, ToolResult
+from pwps_agent.core.state_merge import merge_state_patch
 from pwps_agent.core.state import PWPSState, create_initial_state
 from pwps_agent.knowledge.web_search_provider import WebSearchProvider, build_web_search_provider
 from pwps_agent.llm.langchain_client import LangChainStructuredClient
@@ -148,33 +149,4 @@ def _build_dependencies(settings: Settings) -> AutoDraftDependencies:
 
 
 def _merge_state_patch(state: PWPSState, patch: dict) -> PWPSState:
-    updated = state.model_copy(deep=True)
-    updated.core_fields.update(patch.get("core_fields", {}))
-    updated.knowledge_queries.extend(patch.get("knowledge_queries", []))
-    for field_id, field_patch in patch.get("fields", {}).items():
-        if field_id not in updated.fields:
-            continue
-        field = updated.fields[field_id]
-        if _field_has_user_priority(field) and field_patch.get("value") not in (None, ""):
-            field.candidates.append(
-                {
-                    "value": field_patch.get("value"),
-                    "status": field_patch.get("status", "candidate"),
-                    "evidence_ids": list(field_patch.get("evidence_ids", [])),
-                    "note": field_patch.get("note"),
-                }
-            )
-            continue
-        for key, value in field_patch.items():
-            setattr(field, key, value)
-    updated.clarification_questions.extend(patch.get("clarification_questions", []))
-    return updated
-
-
-def _field_has_user_priority(field) -> bool:
-    source_type = (field.source or {}).get("type")
-    return field.status == "user_confirmed" or field.status == "filled" and source_type in {
-        None,
-        "user_input",
-        "user_confirmation",
-    }
+    return merge_state_patch(state, patch)

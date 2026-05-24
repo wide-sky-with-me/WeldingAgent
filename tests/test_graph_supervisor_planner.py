@@ -1,0 +1,101 @@
+from pathlib import Path
+
+from pwps_agent.config import Settings
+from pwps_agent.core.contracts import AgentAction
+from pwps_agent.core.state import create_initial_state
+from pwps_agent.graph.state import GraphRuntimeContext
+from pwps_agent.graph.supervisor import LLMSupervisorPlanner, supervisor_node
+from pwps_agent.workflows.auto_draft import AutoDraftDependencies
+
+
+class PlannerReturningCompose:
+    def plan_next_action(self, state):
+        return AgentAction(
+            action_type="COMPOSE_DRAFT",
+            rationale_summary="Injected planner selected draft composition.",
+            expected_state_change="Render artifacts.",
+        )
+
+
+class CapturingStructuredClient:
+    def __init__(self):
+        self.calls = []
+
+    def complete_structured(self, system_prompt, user_prompt, schema):
+        self.calls.append(
+            {
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "schema": schema,
+            }
+        )
+        return AgentAction(
+            action_type="CALL_TOOL",
+            tool_name="knowledge_planning",
+            rationale_summary="Plan evidence queries from available fields.",
+            expected_state_change="Add planned knowledge queries.",
+        )
+
+
+def _context(tmp_path: Path, planner=None):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=object(),
+    )
+    return GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=planner,
+    )
+
+
+def test_supervisor_node_uses_injected_planner(tmp_path: Path):
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="planner_injection",
+    )
+
+    result = supervisor_node(
+        {
+            "pwps_state": state,
+            "context": _context(tmp_path, planner=PlannerReturningCompose()),
+        }
+    )
+
+    next_state = result["pwps_state"]
+    assert next_state.pending_action is not None
+    assert next_state.pending_action.action_type == "COMPOSE_DRAFT"
+    assert next_state.actions[-1].rationale_summary == (
+        "Injected planner selected draft composition."
+    )
+    supervisor_event = next_state.trace[-1]
+    assert supervisor_event["node"] == "supervisor"
+    assert supervisor_event["payload"]["action_type"] == "COMPOSE_DRAFT"
+    assert supervisor_event["payload"]["action_index"] == 1
+
+
+def test_llm_supervisor_planner_requests_structured_agent_action():
+    client = CapturingStructuredClient()
+    planner = LLMSupervisorPlanner(client=client)
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="llm_planner",
+    )
+    state.core_fields = {
+        "base_material": "Q355B",
+        "thickness": "12mm",
+        "welding_process": "GMAW",
+    }
+
+    action = planner.plan_next_action(state)
+
+    assert action.action_type == "CALL_TOOL"
+    assert action.tool_name == "knowledge_planning"
+    assert client.calls[0]["schema"] is AgentAction
+    assert "Domain Skill: pwps_auto_draft" in client.calls[0]["system_prompt"]
+    assert "available_tools" in client.calls[0]["user_prompt"]
+    assert "Q355B" in client.calls[0]["user_prompt"]

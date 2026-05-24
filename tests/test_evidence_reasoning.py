@@ -24,6 +24,43 @@ def test_search_results_convert_to_web_evidence() -> None:
     assert "ER50-6" in evidence[0].content
 
 
+def test_search_results_classify_source_tier_and_reliability() -> None:
+    results = [
+        SearchResult(
+            result_id="official",
+            query_id="q1",
+            provider="brave",
+            title="AWS D1.1 Structural Welding Code",
+            url="https://www.aws.org/standards/page/d1.1",
+            snippet="Official AWS standard page.",
+        ),
+        SearchResult(
+            result_id="textbook",
+            query_id="q1",
+            provider="brave",
+            title="Welding Handbook chapter",
+            url="https://library.example.org/welding-handbook",
+            snippet="Textbook style reference for GMAW.",
+        ),
+        SearchResult(
+            result_id="webpage",
+            query_id="q1",
+            provider="brave",
+            title="Blog WPS example",
+            url="https://example.com/blog/wps",
+            snippet="Generic webpage example.",
+        ),
+    ]
+
+    evidence = search_results_to_evidence(results)
+
+    assert [(item.source_tier, item.reliability) for item in evidence] == [
+        ("official_standard", "high"),
+        ("textbook", "medium"),
+        ("webpage", "low"),
+    ]
+
+
 def test_apply_field_candidates_marks_values_as_candidate_with_evidence() -> None:
     state = create_initial_state("Q355B GMAW", "auto_draft")
 

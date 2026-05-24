@@ -29,7 +29,7 @@ class PWPSState(BaseModel):
     clarification_questions: list[dict] = Field(default_factory=list)
     risks: list[dict] = Field(default_factory=list)
     trace: list[dict] = Field(default_factory=list)
-    status: Literal["running", "need_user_input", "done", "failed"] = "running"
+    status: Literal["running", "need_user_input", "done", "failed", "interrupted"] = "running"
     step_count: int = 0
 
 

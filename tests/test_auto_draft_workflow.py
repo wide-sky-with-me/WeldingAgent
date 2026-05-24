@@ -130,6 +130,10 @@ def test_run_auto_draft_persists_expected_artifacts(tmp_path: Path) -> None:
     assert (run_dir / "pwps_draft.md").exists()
     assert (run_dir / "field_report.json").exists()
     assert (run_dir / "trace.json").exists()
+    evidence_index = json.loads((run_dir / "evidence_index.json").read_text(encoding="utf-8"))
+    assert evidence_index["search_context"]["queries"][0]["query_id"] == "kq_position_1"
+    assert evidence_index["evidence_to_fields"]["ev_r1"] == ["base_material", "shielding_gas"]
+    assert evidence_index["field_to_evidence"]["shielding_gas"] == ["ev_r1"]
     assert json.loads((run_dir / "field_report.json").read_text(encoding="utf-8"))[
         "candidate_fields"
     ] == ["shielding_gas"]

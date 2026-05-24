@@ -5,6 +5,7 @@ description = "LLM-centric pWPS draft generation agent core"
 requires-python = ">=3.14"
 dependencies = [
     "langchain-openai>=0.3,<0.4",
+    "langgraph>=1.0.1",
     "pydantic>=2.13,<3",
 ]
 

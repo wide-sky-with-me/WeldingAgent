@@ -65,7 +65,7 @@ Out of scope for stage one:
 
 ## Current Implementation Progress
 
-As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice:
+As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and a minimal LangGraph auto-draft action loop:
 
 - Core Pydantic contracts and initial `PWPSState` are implemented.
 - Provider-neutral `.env` loading is implemented for LLM, web search, and runtime paths.
@@ -76,13 +76,51 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice:
 - `requirement_understanding`, `knowledge_planning`, and `field_reasoning` are LLM-backed and schema-validated.
 - `knowledge_planning` generates targeted model-planned queries instead of fixed query templates.
 - `auto_draft` runs requirement extraction, query planning, real web search, evidence conversion, field reasoning, Markdown rendering, field report rendering, trace persistence, and output persistence.
-- Tests currently cover config loading, contracts, interaction modes, web search providers, LLM clients, requirement understanding, knowledge planning, evidence reasoning, rendering, auto draft workflow, and CLI.
+- `graph/` now contains the first LangGraph runtime slice: deterministic Supervisor action planning, action routing, runtime tool execution, draft composition, finish handling, and injectable graph dependencies.
+- The graph Supervisor now has an injectable planner seam: deterministic auto-draft planning remains the default, while `LLMSupervisorPlanner` can request structured `AgentAction` output from an LLM with Domain Skill context.
+- The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
+- Web search execution in the graph supports multiple planned queries through a bounded thread pool, per-query timeout handling, partial-success trace records, and per-query error/timeout trace events.
+- Web search providers now support instance-level query caching plus configurable transient-error retry/backoff, while avoiding retries for non-transient authorization failures.
+- Evidence converted from web search now includes source-tier and confidence metadata, classifying references as official-standard, textbook, or webpage tier while preserving candidate/reference-only semantics.
+- Run persistence now writes `evidence_index.json` with retrieval context, evidence records, evidence-to-field mappings, and field-to-evidence mappings for reuse and audit.
+- State patch merging now goes through `core/state_merge.py`, with allowed patch keys, unknown-key/unknown-field merge warnings, field priority protection, candidate preservation, timestamp metadata, and ID-based de-duplication for knowledge queries, search results, and evidence.
+- Supervisor action decisions now include action metadata in trace, including action type, tool name, and action index.
+- Graph runtime checkpoint helpers persist safe resume points under `<output_dir>/<run_id>/checkpoints/`, including numbered checkpoint files and `latest.json`.
+- Graph runs can be interrupted after a configured number of runtime steps and resumed from the latest checkpoint by loading the saved `PWPSState` with resume mode.
+- `domain_skills/` now contains first-stage markdown guidance packages for auto-draft, guided confirmation, evidence handling, and risk review.
+- `prompt_loader` can safely load individual Domain Skills and ordered Domain Skill context bundles for future Supervisor prompts.
+- The graph slice currently covers the auto-draft path only; full LLM Supervisor autonomy, checkpoint recovery, guided-confirmation graph flow, active domain-skill selection, and real interactive user-turn handling remain future work.
+- Tests currently cover config loading, contracts, interaction modes, web search providers, LLM clients, requirement understanding, knowledge planning, evidence reasoning, rendering, state merge, domain skill loading, auto draft workflow, graph auto draft workflow, graph retry/timeout behavior, graph checkpoint/resume behavior, graph Supervisor planner injection, and CLI.
 
 Recent verification:
 
 ```text
 uv run pytest -q
-31 passed
+49 passed, 1 warning
+
+uv run pytest tests/test_knowledge_planning.py tests/test_web_search_provider.py tests/test_evidence_reasoning.py tests/test_state_merge.py tests/test_auto_draft_workflow.py tests/test_graph_retry.py -q
+22 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+uv run pytest -q
+45 passed, 1 warning
+
+uv run pytest tests/test_graph_checkpoint_resume.py tests/test_graph_supervisor_planner.py tests/test_graph_retry.py tests/test_graph_auto_draft.py -v
+8 passed, 1 warning
+
+uv run pytest tests/test_state_merge.py tests/test_graph_retry.py tests/test_graph_auto_draft.py tests/test_auto_draft_workflow.py -v
+8 passed, 1 warning
+
+uv run pytest tests/test_graph_supervisor_planner.py -v
+2 passed, 1 warning
+
+uv run pytest tests/test_domain_skills.py -v
+3 passed
+
+uv run pytest tests/test_graph_auto_draft.py -v
+1 passed, 1 warning
 
 uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-smoke --run-id smoke_langchain_structured_explicit
 /tmp/pwps-agent-smoke/smoke_langchain_structured_explicit

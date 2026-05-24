@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from time import sleep
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from pwps_agent.config import WebSearchSettings
@@ -22,16 +24,27 @@ class TavilySearchProvider(WebSearchProvider):
         if not settings.tavily_api_key:
             raise ValueError("TAVILY_API_KEY is required for Tavily web search.")
         self.settings = settings
+        self._response_cache: dict[str, dict[str, Any]] = {}
 
     def search(self, query: str, query_id: str) -> list[SearchResult]:
-        payload = {
+        request_payload = {
             "api_key": self.settings.tavily_api_key,
             "query": query,
             "search_depth": self.settings.tavily_search_depth,
             "max_results": self.settings.max_results,
             "include_raw_content": self.settings.tavily_include_raw_content,
         }
-        response = _post_json(self.endpoint, payload, timeout=self.settings.timeout_seconds)
+        cache_key = _cache_key("tavily", query)
+        response = _cached_or_fetch(
+            cache=self._response_cache,
+            cache_key=cache_key,
+            settings=self.settings,
+            fetch=lambda: _post_json(
+                self.endpoint,
+                request_payload,
+                timeout=self.settings.timeout_seconds,
+            ),
+        )
         return self.parse_response(query_id=query_id, payload=response)
 
     @staticmethod
@@ -60,6 +73,7 @@ class BraveSearchProvider(WebSearchProvider):
         if not settings.brave_api_key:
             raise ValueError("BRAVE_SEARCH_API_KEY is required for Brave web search.")
         self.settings = settings
+        self._response_cache: dict[str, dict[str, Any]] = {}
 
     def search(self, query: str, query_id: str) -> list[SearchResult]:
         url = (
@@ -73,7 +87,13 @@ class BraveSearchProvider(WebSearchProvider):
             "Accept": "application/json",
             "X-Subscription-Token": self.settings.brave_api_key,
         }
-        response = _get_json(url, headers=headers, timeout=self.settings.timeout_seconds)
+        cache_key = _cache_key("brave", query)
+        response = _cached_or_fetch(
+            cache=self._response_cache,
+            cache_key=cache_key,
+            settings=self.settings,
+            fetch=lambda: _get_json(url, headers=headers, timeout=self.settings.timeout_seconds),
+        )
         return self.parse_response(query_id=query_id, payload=response)
 
     @staticmethod
@@ -118,6 +138,44 @@ def _get_json(url: str, headers: dict[str, str], timeout: int) -> dict[str, Any]
     request = Request(url, headers=headers, method="GET")
     with urlopen(request, timeout=timeout) as response:  # nosec B310 - configured API endpoint
         return json.loads(response.read().decode("utf-8"))
+
+
+def _cached_or_fetch(
+    cache: dict[str, dict[str, Any]],
+    cache_key: str,
+    settings: WebSearchSettings,
+    fetch,
+) -> dict[str, Any]:
+    if settings.cache_enabled and cache_key in cache:
+        return cache[cache_key]
+    response = _with_retries(fetch, settings)
+    if settings.cache_enabled:
+        cache[cache_key] = response
+    return response
+
+
+def _with_retries(fetch, settings: WebSearchSettings) -> dict[str, Any]:
+    max_retries = max(0, settings.max_retries)
+    for attempt in range(max_retries + 1):
+        try:
+            return fetch()
+        except Exception as exc:
+            if attempt >= max_retries or not _is_retryable(exc):
+                raise
+            sleep(settings.retry_backoff_seconds * (2**attempt))
+    raise RuntimeError("unreachable web search retry state")
+
+
+def _is_retryable(exc: Exception) -> bool:
+    if isinstance(exc, HTTPError):
+        return exc.code == 429 or 500 <= exc.code < 600
+    if isinstance(exc, TimeoutError | URLError):
+        return True
+    return False
+
+
+def _cache_key(provider: str, query: str) -> str:
+    return f"{provider}:{' '.join(query.strip().lower().split())}"
 
 
 def _quote(value: str) -> str:
