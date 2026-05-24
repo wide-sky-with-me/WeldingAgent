@@ -2,6 +2,7 @@ from pathlib import Path
 
 from pwps_agent.cli import build_parser, main
 from pwps_agent.core.state import create_initial_state
+from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.workflows.auto_draft import AutoDraftResult
 
 
@@ -74,6 +75,25 @@ def test_cli_parser_accepts_guided_confirmation_view_and_resume(tmp_path: Path) 
     assert resume_args.output_dir == tmp_path
 
 
+def test_cli_parser_accepts_guided_confirmation_resume_run(tmp_path: Path) -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "guided-confirm-resume-run",
+            "guided_run",
+            "--set",
+            "filler_material=ER50-6",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert args.command == "guided-confirm-resume-run"
+    assert args.run_id == "guided_run"
+    assert args.output_dir == tmp_path
+
+
 def test_cli_guided_confirmation_resume_writes_artifacts(tmp_path: Path, capsys) -> None:
     state_path = tmp_path / "state.json"
     state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation", run_id="cli_resume")
@@ -99,6 +119,32 @@ def test_cli_guided_confirmation_resume_writes_artifacts(tmp_path: Path, capsys)
     assert exit_code == 0
     assert str(tmp_path / "cli_resume") in captured.out
     assert (tmp_path / "cli_resume" / "pwps_draft.md").exists()
+
+
+def test_cli_guided_confirmation_resume_run_loads_checkpoint(tmp_path: Path, capsys) -> None:
+    state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation", run_id="cli_resume_run")
+    state.status = "need_user_input"
+    state.fields["filler_material"].value = "ER50-6"
+    state.fields["filler_material"].status = "candidate"
+    save_checkpoint(state, tmp_path, "ask_user")
+
+    exit_code = main(
+        [
+            "guided-confirm-resume-run",
+            "cli_resume_run",
+            "--set",
+            "filler_material=ER50-6",
+            "--message",
+            "Confirm filler from checkpoint.",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert str(tmp_path / "cli_resume_run") in captured.out
+    assert (tmp_path / "cli_resume_run" / "pwps_draft.md").exists()
 
 
 def test_cli_auto_draft_uses_graph_runtime_by_default(monkeypatch, tmp_path: Path, capsys) -> None:

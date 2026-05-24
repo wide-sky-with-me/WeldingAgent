@@ -13,7 +13,10 @@ from pwps_agent.core.modes import (
     rollback_confirmation,
 )
 from pwps_agent.web.guided_confirmation import load_state, save_state, serve_guided_confirmation
-from pwps_agent.workflows.guided_confirmation import resume_guided_confirmation
+from pwps_agent.workflows.guided_confirmation import (
+    resume_guided_confirmation,
+    resume_guided_confirmation_from_checkpoint,
+)
 from pwps_agent.workflows.auto_draft import run_graph_auto_draft
 
 
@@ -45,6 +48,14 @@ def build_parser() -> argparse.ArgumentParser:
     guided_confirm_resume.add_argument("--reason", default=None)
     guided_confirm_resume.add_argument("--evidence-id", dest="evidence_ids", action="append", default=[])
     guided_confirm_resume.add_argument("--output-dir", type=Path, default=None)
+
+    guided_confirm_resume_run = subparsers.add_parser("guided-confirm-resume-run")
+    guided_confirm_resume_run.add_argument("run_id")
+    guided_confirm_resume_run.add_argument("--set", dest="set_values", action="append", default=[])
+    guided_confirm_resume_run.add_argument("--message", default="User confirmation from CLI.")
+    guided_confirm_resume_run.add_argument("--reason", default=None)
+    guided_confirm_resume_run.add_argument("--evidence-id", dest="evidence_ids", action="append", default=[])
+    guided_confirm_resume_run.add_argument("--output-dir", type=Path, default=None)
 
     guided_confirm_web = subparsers.add_parser("guided-confirm-web")
     guided_confirm_web.add_argument("state_path", type=Path)
@@ -137,6 +148,28 @@ def main(argv: list[str] | None = None) -> int:
                 settings=settings,
             )
             save_state(args.state_path, result.state)
+        except Exception as exc:
+            print(f"pwps-agent: {exc}", file=sys.stderr)
+            return 1
+        print(result.output_dir)
+        return 0
+
+    if args.command == "guided-confirm-resume-run":
+        settings = load_settings()
+        if args.output_dir is not None:
+            settings.paths.output_dir = args.output_dir
+        try:
+            result = resume_guided_confirmation_from_checkpoint(
+                run_id=args.run_id,
+                payload={
+                    "fields": _parse_set_values(args.set_values),
+                    "message": args.message,
+                    "reason": args.reason,
+                    "evidence_ids_shown": args.evidence_ids,
+                    "action": "accepted",
+                },
+                settings=settings,
+            )
         except Exception as exc:
             print(f"pwps-agent: {exc}", file=sys.stderr)
             return 1

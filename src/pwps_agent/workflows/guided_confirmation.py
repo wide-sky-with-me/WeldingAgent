@@ -7,6 +7,7 @@ from pwps_agent.core.contracts import AgentAction
 from pwps_agent.core.modes import confirm_fields, edit_confirmation, rollback_confirmation
 from pwps_agent.core.state import PWPSState
 from pwps_agent.graph.builder import build_auto_draft_graph
+from pwps_agent.graph.checkpoints import load_latest_checkpoint
 from pwps_agent.graph.state import GraphRuntimeContext
 from pwps_agent.workflows.auto_draft import AutoDraftDependencies
 
@@ -16,9 +17,15 @@ class GuidedConfirmationResumeResult(BaseModel):
     output_dir: str
 
 
-class ResumeAfterConfirmationPlanner:
+class GuidedConfirmationResumePlanner:
     def plan_next_action(self, state: PWPSState) -> AgentAction:
         completed_nodes = {entry.get("node") for entry in state.trace}
+        if _has_pending_confirmation_fields(state):
+            return AgentAction(
+                action_type="ASK_USER",
+                rationale_summary="Additional candidate fields still need user confirmation.",
+                expected_state_change="Pause with the next grouped confirmation view.",
+            )
         if "compose_draft" not in completed_nodes:
             return AgentAction(
                 action_type="COMPOSE_DRAFT",
@@ -104,7 +111,8 @@ def resume_guided_confirmation(
             "context": GraphRuntimeContext(
                 settings=settings,
                 dependencies=deps,
-                supervisor_planner=ResumeAfterConfirmationPlanner(),
+                supervisor_planner=GuidedConfirmationResumePlanner(),
+                checkpoint_enabled=True,
             ),
         }
     )
@@ -112,4 +120,26 @@ def resume_guided_confirmation(
     return GuidedConfirmationResumeResult(
         state=final_state,
         output_dir=str(settings.paths.output_dir / final_state.run_id),
+    )
+
+
+def resume_guided_confirmation_from_checkpoint(
+    run_id: str,
+    payload: dict,
+    settings: Settings,
+    dependencies: AutoDraftDependencies | None = None,
+) -> GuidedConfirmationResumeResult:
+    state = load_latest_checkpoint(settings.paths.output_dir, run_id)
+    return resume_guided_confirmation(
+        state,
+        payload,
+        settings=settings,
+        dependencies=dependencies,
+    )
+
+
+def _has_pending_confirmation_fields(state: PWPSState) -> bool:
+    return any(
+        field.status in {"candidate", "need_confirmation"}
+        for field in state.fields.values()
     )

@@ -1,8 +1,10 @@
 from pwps_agent.core.contracts import Evidence
 from pwps_agent.core.state import create_initial_state
+from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.web.guided_confirmation import (
     apply_confirmation_payload,
     apply_resume_payload,
+    apply_resume_run_payload,
     render_guided_confirmation_html,
     web_state_payload,
 )
@@ -78,3 +80,28 @@ def test_web_resume_payload_persists_artifacts(tmp_path) -> None:
     assert result["state"].status == "done"
     assert result["output_dir"] == str(tmp_path / "web_resume")
     assert (tmp_path / "web_resume" / "field_report.json").exists()
+
+
+def test_web_resume_run_payload_loads_latest_checkpoint(tmp_path) -> None:
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW",
+        "guided_confirmation",
+        run_id="web_resume_run",
+    )
+    state.status = "need_user_input"
+    state.fields["filler_material"].value = "ER50-6"
+    state.fields["filler_material"].status = "candidate"
+    save_checkpoint(state, tmp_path, "ask_user")
+
+    result = apply_resume_run_payload(
+        "web_resume_run",
+        {
+            "fields": {"filler_material": "ER50-6"},
+            "message": "Confirm from web checkpoint.",
+            "output_dir": str(tmp_path),
+        },
+    )
+
+    assert result["state"].status == "done"
+    assert result["output_dir"] == str(tmp_path / "web_resume_run")
+    assert (tmp_path / "web_resume_run" / "pwps_draft.md").exists()

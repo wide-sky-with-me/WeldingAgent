@@ -13,6 +13,7 @@ from pwps_agent.config import Settings
 from pwps_agent.workflows.guided_confirmation import (
     apply_guided_confirmation_payload,
     resume_guided_confirmation,
+    resume_guided_confirmation_from_checkpoint,
 )
 
 
@@ -37,6 +38,18 @@ def apply_resume_payload(state: PWPSState, payload: dict[str, Any]) -> dict[str,
     if payload.get("output_dir"):
         settings.paths.output_dir = Path(str(payload["output_dir"]))
     result = resume_guided_confirmation(state, payload, settings=settings)
+    return {"state": result.state, "output_dir": result.output_dir}
+
+
+def apply_resume_run_payload(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    settings = Settings()
+    if payload.get("output_dir"):
+        settings.paths.output_dir = Path(str(payload["output_dir"]))
+    result = resume_guided_confirmation_from_checkpoint(
+        run_id=run_id,
+        payload=payload,
+        settings=settings,
+    )
     return {"state": result.state, "output_dir": result.output_dir}
 
 

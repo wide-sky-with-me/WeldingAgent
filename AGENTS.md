@@ -92,6 +92,7 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 - Graph runtime checkpoint helpers persist safe resume points under `<output_dir>/<run_id>/checkpoints/`, including numbered checkpoint files and `latest.json`.
 - Graph runs can be interrupted after a configured number of runtime steps and resumed from the latest checkpoint by loading the saved `PWPSState` with resume mode.
 - `guided_confirmation` now has a first interaction slice: grouped confirmation views with clarification questions, candidates, evidence snippets, risks, explicit user confirmation records, edit/rollback history, a graph `ASK_USER` pause node, graph-backed resume through compose/finish, state-file CLI commands, and a lightweight local Web UI/API.
+- `guided_confirmation` now supports durable checkpoint-backed resume by `run_id`; after user confirmation it returns through the graph Supervisor, pauses again when candidate fields remain, or composes/finishes when confirmation is complete.
 - `domain_skills/` now contains first-stage markdown guidance packages for auto-draft, guided confirmation, evidence handling, and risk review.
 - `prompt_loader` can safely load individual Domain Skills and ordered Domain Skill context bundles for future Supervisor prompts.
 - The graph slice currently covers auto-draft plus guided-confirmation `ASK_USER` pause/resume through draft composition; full LLM Supervisor autonomy, active domain-skill selection, durable checkpoint-backed live user sessions, and richer multi-turn interaction remain future work.
@@ -100,6 +101,18 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 Recent verification:
 
 ```text
+uv run pytest tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_cli.py tests/test_graph_guided_confirmation.py -q
+23 passed, 1 warning
+
+uv run pytest -q
+78 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_domain_skills.py tests/test_graph_supervisor_planner.py -q
 10 passed, 1 warning
 

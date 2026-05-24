@@ -229,6 +229,8 @@ passed with no output
 
 ## Phase 4: Complete Guided Confirmation As A Durable Multi-Turn Runtime
 
+> **Status:** Completed for durable checkpoint-backed resume and repeated confirmation turns. Guided confirmation can resume from latest run checkpoints by `run_id`, apply confirmation payloads, return to the graph Supervisor, pause again when candidate fields remain, or compose/finish when confirmation is complete.
+
 **Goal:** Move guided confirmation from first interaction slice to durable graph-backed live session flow.
 
 **Why fourth:** The current guided flow can pause/resume and render a local UI, but it is still state-file backed and not a durable session loop.
@@ -247,13 +249,13 @@ passed with no output
 
 **Work items:**
 
-- [ ] Store live guided-confirmation pause points as checkpoints, not only ad hoc state files.
-- [ ] Add resume-by-run-id behavior using latest checkpoint.
-- [ ] Let the graph return to Supervisor after user confirmation instead of always jumping directly to compose/finish.
-- [ ] Support repeated confirmation groups across multiple turns.
-- [ ] Preserve edit/rollback history across checkpoint reloads.
-- [ ] Add Web/API tests for resume from checkpoint and second confirmation turn.
-- [ ] Add CLI smoke commands for run-id based guided resume.
+- [x] Store live guided-confirmation pause points as checkpoints, not only ad hoc state files.
+- [x] Add resume-by-run-id behavior using latest checkpoint.
+- [x] Let the graph return to Supervisor after user confirmation instead of always jumping directly to compose/finish.
+- [x] Support repeated confirmation groups across multiple turns.
+- [x] Preserve edit/rollback history across checkpoint reloads.
+- [x] Add Web/API tests for resume from checkpoint and second confirmation turn.
+- [x] Add CLI smoke commands for run-id based guided resume.
 
 **Acceptance gates:**
 
@@ -262,6 +264,22 @@ uv run pytest tests/test_guided_confirmation.py tests/test_guided_confirmation_r
 uv run pytest -q
 uv run python -m compileall -q src tests
 git diff --check
+```
+
+Verification:
+
+```text
+uv run pytest tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_cli.py tests/test_graph_guided_confirmation.py -q
+23 passed, 1 warning
+
+uv run pytest -q
+78 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
 ```
 
 ## Phase 5: Implement Supplement Update As A First-Class Graph Mode
