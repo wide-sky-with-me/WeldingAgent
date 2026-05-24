@@ -78,9 +78,13 @@ class SearchResult(BaseModel):
 class ConfirmationRecord(BaseModel):
     confirmation_id: str
     field_ids: list[str]
-    action: Literal["accepted", "modified", "skipped", "deferred"]
+    action: Literal["accepted", "modified", "skipped", "deferred", "edited", "rolled_back"]
     values: dict[str, Any] = Field(default_factory=dict)
+    previous_values: dict[str, Any] = Field(default_factory=dict)
     user_message: str | None = None
+    user_rationale: str | None = None
     rationale_shown: str | None = None
     evidence_ids_shown: list[str] = Field(default_factory=list)
+    supersedes_confirmation_id: str | None = None
+    rolled_back_confirmation_id: str | None = None
     created_at: str | None = None

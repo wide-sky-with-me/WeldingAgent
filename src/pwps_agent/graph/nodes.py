@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from pwps_agent.core.contracts import SearchResult
+from pwps_agent.core.modes import build_confirmation_view
 from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.graph.state import GraphState
 from pwps_agent.render.markdown import render_field_report, render_pwps_draft
@@ -155,10 +156,26 @@ def compose_draft_node(graph_state: GraphState) -> dict:
     return {"pwps_state": state}
 
 
+def ask_user_node(graph_state: GraphState) -> dict:
+    state = graph_state["pwps_state"].model_copy(deep=True)
+    context = graph_state["context"]
+    confirmation_view = build_confirmation_view(state)
+    state.status = "need_user_input"
+    _append_trace(
+        state,
+        "ask_user",
+        "user_input_required",
+        "Paused for guided field confirmation.",
+        {"confirmation_view": confirmation_view},
+    )
+    _finalize_runtime_node(state, context, "ask_user")
+    return {"pwps_state": state}
+
+
 def finish_node(graph_state: GraphState) -> dict:
     state = graph_state["pwps_state"].model_copy(deep=True)
     context = graph_state["context"]
-    if state.status not in {"failed", "interrupted"}:
+    if state.status not in {"failed", "interrupted", "need_user_input"}:
         state.status = "done"
     _append_trace(
         state,

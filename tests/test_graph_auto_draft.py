@@ -6,7 +6,7 @@ from pwps_agent.core.contracts import SearchResult, ToolResult
 from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.state import GraphRuntimeContext
-from pwps_agent.workflows.auto_draft import AutoDraftDependencies
+from pwps_agent.workflows.auto_draft import AutoDraftDependencies, run_graph_auto_draft
 
 
 class StaticRequirementTool:
@@ -137,3 +137,35 @@ def test_auto_draft_graph_executes_tool_sequence_and_persists_artifacts(tmp_path
     assert json.loads((run_dir / "field_report.json").read_text(encoding="utf-8"))[
         "candidate_fields"
     ] == ["shielding_gas"]
+
+
+def test_run_graph_auto_draft_service_invokes_graph_and_persists_artifacts(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=StaticReasoningTool(),
+    )
+
+    result = run_graph_auto_draft(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        settings=settings,
+        dependencies=dependencies,
+        run_id="graph_service_test",
+    )
+
+    run_dir = tmp_path / "graph_service_test"
+    assert result.state.status == "done"
+    assert result.output_dir == str(run_dir)
+    assert (run_dir / "pwps.json").exists()
+    assert (run_dir / "pwps_draft.md").exists()
+    assert (run_dir / "field_report.json").exists()
+    assert (run_dir / "trace.json").exists()
+    assert (run_dir / "evidence_index.json").exists()
+    assert any(
+        entry["node"] == "supervisor" and entry["event_type"] == "agent_action"
+        for entry in result.state.trace
+    )

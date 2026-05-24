@@ -77,6 +77,7 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 - `knowledge_planning` generates targeted model-planned queries instead of fixed query templates.
 - `auto_draft` runs requirement extraction, query planning, real web search, evidence conversion, field reasoning, Markdown rendering, field report rendering, trace persistence, and output persistence.
 - `graph/` now contains the first LangGraph runtime slice: deterministic Supervisor action planning, action routing, runtime tool execution, draft composition, finish handling, and injectable graph dependencies.
+- `pwps-agent auto-draft` now routes through the graph-backed `run_graph_auto_draft()` service by default; the older linear `run_auto_draft()` remains available for compatibility and legacy workflow tests.
 - The graph Supervisor now has an injectable planner seam: deterministic auto-draft planning remains the default, while `LLMSupervisorPlanner` can request structured `AgentAction` output from an LLM with Domain Skill context.
 - The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
 - Web search execution in the graph supports multiple planned queries through a bounded thread pool, per-query timeout handling, partial-success trace records, and per-query error/timeout trace events.
@@ -87,14 +88,54 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 - Supervisor action decisions now include action metadata in trace, including action type, tool name, and action index.
 - Graph runtime checkpoint helpers persist safe resume points under `<output_dir>/<run_id>/checkpoints/`, including numbered checkpoint files and `latest.json`.
 - Graph runs can be interrupted after a configured number of runtime steps and resumed from the latest checkpoint by loading the saved `PWPSState` with resume mode.
+- `guided_confirmation` now has a first interaction slice: grouped confirmation views with clarification questions, candidates, evidence snippets, risks, explicit user confirmation records, edit/rollback history, a graph `ASK_USER` pause node, graph-backed resume through compose/finish, state-file CLI commands, and a lightweight local Web UI/API.
 - `domain_skills/` now contains first-stage markdown guidance packages for auto-draft, guided confirmation, evidence handling, and risk review.
 - `prompt_loader` can safely load individual Domain Skills and ordered Domain Skill context bundles for future Supervisor prompts.
-- The graph slice currently covers the auto-draft path only; full LLM Supervisor autonomy, checkpoint recovery, guided-confirmation graph flow, active domain-skill selection, and real interactive user-turn handling remain future work.
-- Tests currently cover config loading, contracts, interaction modes, web search providers, LLM clients, requirement understanding, knowledge planning, evidence reasoning, rendering, state merge, domain skill loading, auto draft workflow, graph auto draft workflow, graph retry/timeout behavior, graph checkpoint/resume behavior, graph Supervisor planner injection, and CLI.
+- The graph slice currently covers auto-draft plus guided-confirmation `ASK_USER` pause/resume through draft composition; full LLM Supervisor autonomy, active domain-skill selection, durable checkpoint-backed live user sessions, and richer multi-turn interaction remain future work.
+- Tests currently cover config loading, contracts, interaction modes, guided confirmation view/history/resume/Web helpers, web search providers, LLM clients, requirement understanding, knowledge planning, evidence reasoning, rendering, state merge, domain skill loading, auto draft workflow, graph auto draft workflow, graph guided-confirmation pause behavior, graph retry/timeout behavior, graph checkpoint/resume behavior, graph Supervisor planner injection, and CLI.
 
 Recent verification:
 
 ```text
+uv run pytest tests/test_cli.py tests/test_graph_auto_draft.py tests/test_auto_draft_workflow.py -q
+9 passed, 1 warning
+
+uv run pytest -q
+66 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
+uv run pytest -q
+64 passed, 1 warning
+
+uv run pytest tests/test_graph_guided_confirmation.py -q
+3 passed, 1 warning
+
+uv run pytest tests/test_guided_confirmation.py tests/test_guided_confirmation_web.py tests/test_cli.py -q
+11 passed
+
+uv run pytest tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_cli.py tests/test_graph_guided_confirmation.py -q
+14 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+uv run pwps-agent guided-confirm /tmp/pwps-guided-state.json --set filler_material=ER50-6 --message "Confirm filler from smoke" --reason "Smoke test" --evidence-id ev_web_1
+confirm_1
+
+uv run pwps-agent guided-confirm-resume /tmp/pwps-guided-resume-state.json --set filler_material=ER50-6 --message "Confirm filler and resume" --reason "CLI resume smoke" --output-dir /tmp/pwps-guided-resume-out
+/tmp/pwps-guided-resume-out/guided_resume_smoke
+
+curl -s -D - http://127.0.0.1:8765/api/state
+HTTP/1.0 200 OK
+
+curl -s -X POST http://127.0.0.1:8765/api/resume ...
+status: done, has_draft: true, output_dir: /tmp/pwps-guided-web-resume-out/web_resume_smoke
+
 uv run pytest -q
 49 passed, 1 warning
 

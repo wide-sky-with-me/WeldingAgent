@@ -11,6 +11,8 @@ def route_action(graph_state: GraphState) -> str:
         return "finish"
     if action.action_type == "CALL_TOOL":
         return "call_tool"
+    if action.action_type == "ASK_USER":
+        return "ask_user"
     if action.action_type in {"COMPOSE_DRAFT", "GENERATE_REPORT"}:
         return "compose_draft"
     if action.action_type == "FINISH":

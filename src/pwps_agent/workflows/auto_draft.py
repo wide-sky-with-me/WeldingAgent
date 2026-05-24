@@ -141,6 +141,31 @@ def run_auto_draft(
     return AutoDraftResult(state=state, output_dir=str(output_dir))
 
 
+def run_graph_auto_draft(
+    requirement: str,
+    settings: Settings,
+    dependencies: AutoDraftDependencies | None = None,
+    run_id: str = "run_local",
+) -> AutoDraftResult:
+    from pwps_agent.graph.builder import build_auto_draft_graph
+    from pwps_agent.graph.state import GraphRuntimeContext
+
+    deps = dependencies or _build_dependencies(settings)
+    state = create_initial_state(requirement, "auto_draft", run_id=run_id)
+    graph = build_auto_draft_graph()
+    result = graph.invoke(
+        {
+            "pwps_state": state,
+            "context": GraphRuntimeContext(settings=settings, dependencies=deps),
+        }
+    )
+    final_state = result["pwps_state"]
+    return AutoDraftResult(
+        state=final_state,
+        output_dir=str(settings.paths.output_dir / final_state.run_id),
+    )
+
+
 def _build_dependencies(settings: Settings) -> AutoDraftDependencies:
     return AutoDraftDependencies(
         llm_client=LangChainStructuredClient(settings.llm),
