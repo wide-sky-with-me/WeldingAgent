@@ -19,6 +19,8 @@ class PWPSState(BaseModel):
     confirmations: list[ConfirmationRecord] = Field(default_factory=list)
     actions: list[AgentAction] = Field(default_factory=list)
     pending_action: AgentAction | None = None
+    active_domain_skills: list[str] = Field(default_factory=list)
+    domain_skill_history: list[dict] = Field(default_factory=list)
     knowledge_queries: list[dict] = Field(default_factory=list)
     search_results: list[dict] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)

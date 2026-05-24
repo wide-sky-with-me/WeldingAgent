@@ -9,6 +9,8 @@ def route_action(graph_state: GraphState) -> str:
     action = graph_state["pwps_state"].pending_action
     if action is None:
         return "finish"
+    if action.action_type == "USE_DOMAIN_SKILL":
+        return "use_domain_skill"
     if action.action_type == "CALL_TOOL":
         return "call_tool"
     if action.action_type == "ASK_USER":

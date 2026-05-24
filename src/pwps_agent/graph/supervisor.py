@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol
 
-from pwps_agent.agent.prompt_loader import load_domain_skill_bundle
+from pwps_agent.agent.prompt_loader import load_domain_skill, load_domain_skill_bundle
 from pwps_agent.core.contracts import AgentAction
 from pwps_agent.core.state import PWPSState
 from pwps_agent.graph.state import GraphState
@@ -46,13 +46,14 @@ class LLMSupervisorPlanner:
     def plan_next_action(self, state: PWPSState) -> AgentAction:
         return complete_structured(
             self.client,
-            self._system_prompt(),
+            self._system_prompt(state),
             self._user_prompt(state),
             AgentAction,
         )
 
-    def _system_prompt(self) -> str:
-        domain_context = load_domain_skill_bundle(self.domain_skill_names)
+    def _system_prompt(self, state: PWPSState) -> str:
+        skill_names = state.active_domain_skills or self.domain_skill_names
+        domain_context = load_domain_skill_bundle(skill_names)
         return "\n\n".join(
             [
                 "You are the LLM Supervisor for a first-stage pWPS draft system.",
@@ -63,6 +64,7 @@ class LLMSupervisorPlanner:
         )
 
     def _user_prompt(self, state: PWPSState) -> str:
+        active_domain_skills = state.active_domain_skills or self.domain_skill_names
         payload = {
             "task_goal": state.task_goal,
             "interaction_mode": state.interaction_mode,
@@ -82,7 +84,10 @@ class LLMSupervisorPlanner:
             "recent_trace": state.trace[-5:],
             "risks": state.risks[-10:],
             "field_report": state.field_report,
+            "active_domain_skills": active_domain_skills,
+            "domain_skill_history": state.domain_skill_history[-10:],
             "available_actions": [
+                "USE_DOMAIN_SKILL",
                 "CALL_TOOL",
                 "ASK_USER",
                 "COMPOSE_DRAFT",
@@ -147,10 +152,18 @@ def supervisor_node(graph_state: GraphState) -> dict:
 
 
 def _validate_action(action: AgentAction) -> str | None:
+    if action.action_type == "USE_DOMAIN_SKILL":
+        if not action.domain_skill_name:
+            return "USE_DOMAIN_SKILL requires domain_skill_name"
+        try:
+            load_domain_skill(action.domain_skill_name)
+        except FileNotFoundError:
+            return f"Unsupported domain skill: {action.domain_skill_name}"
     if action.action_type == "CALL_TOOL":
         if action.tool_name not in AVAILABLE_GRAPH_TOOLS:
             return f"Unsupported tool action: {action.tool_name}"
     if action.action_type not in {
+        "USE_DOMAIN_SKILL",
         "CALL_TOOL",
         "ASK_USER",
         "COMPOSE_DRAFT",

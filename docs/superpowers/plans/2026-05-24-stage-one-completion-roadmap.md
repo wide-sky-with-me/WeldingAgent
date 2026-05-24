@@ -177,6 +177,8 @@ passed with no output
 
 ## Phase 3: Add Active Domain Skill Selection And Traceable Skill Use
 
+> **Status:** Completed. `USE_DOMAIN_SKILL` is now a graph action with routing, stateful active-skill tracking, domain-skill history, trace payloads, skill-name validation, and active skill context injection into LLM Supervisor prompts.
+
 **Goal:** Let the Supervisor explicitly select and record Domain Skill context instead of always using a fixed bundle.
 
 **Why third:** Domain Skills are a first-class architecture concept. The runtime should show which skill guidance was used and why.
@@ -193,12 +195,12 @@ passed with no output
 
 **Work items:**
 
-- [ ] Add state fields for active domain skills or skill-use history.
-- [ ] Implement `USE_DOMAIN_SKILL` routing as a real graph action.
-- [ ] Validate requested skill names through `prompt_loader`.
-- [ ] Record skill name, rationale, and loaded context identifier in trace.
-- [ ] Include active skill context in subsequent LLM Supervisor prompts.
-- [ ] Add tests for valid skill selection, invalid skill rejection, and trace payload shape.
+- [x] Add state fields for active domain skills or skill-use history.
+- [x] Implement `USE_DOMAIN_SKILL` routing as a real graph action.
+- [x] Validate requested skill names through `prompt_loader`.
+- [x] Record skill name, rationale, and loaded context identifier in trace.
+- [x] Include active skill context in subsequent LLM Supervisor prompts.
+- [x] Add tests for valid skill selection, invalid skill rejection, and trace payload shape.
 
 **Acceptance gates:**
 
@@ -207,6 +209,22 @@ uv run pytest tests/test_domain_skills.py tests/test_graph_supervisor_planner.py
 uv run pytest -q
 uv run python -m compileall -q src tests
 git diff --check
+```
+
+Verification:
+
+```text
+uv run pytest tests/test_domain_skills.py tests/test_graph_supervisor_planner.py -q
+10 passed, 1 warning
+
+uv run pytest -q
+73 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
 ```
 
 ## Phase 4: Complete Guided Confirmation As A Durable Multi-Turn Runtime

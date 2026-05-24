@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
+from pwps_agent.agent.prompt_loader import load_domain_skill
 from pwps_agent.core.contracts import SearchResult
 from pwps_agent.core.modes import build_confirmation_view
 from pwps_agent.graph.checkpoints import save_checkpoint
@@ -11,6 +12,42 @@ from pwps_agent.storage.persist import persist_run_artifacts
 from pwps_agent.tools.evidence import search_results_to_evidence
 from pwps_agent.tools.field_reasoning import apply_field_candidates, infer_candidates_from_evidence
 from pwps_agent.workflows.auto_draft import _merge_state_patch
+
+
+def use_domain_skill_node(graph_state: GraphState) -> dict:
+    state = graph_state["pwps_state"].model_copy(deep=True)
+    context = graph_state["context"]
+    action = state.pending_action
+    if action is None or not action.domain_skill_name:
+        state.status = "failed"
+        _append_trace(state, "use_domain_skill", "error", "No pending domain skill action.", {})
+        _finalize_runtime_node(state, context, "use_domain_skill")
+        return {"pwps_state": state}
+
+    skill = load_domain_skill(action.domain_skill_name)
+    if skill.name not in state.active_domain_skills:
+        state.active_domain_skills.append(skill.name)
+    context_id = f"domain_skill:{skill.name}"
+    state.domain_skill_history.append(
+        {
+            "skill_name": skill.name,
+            "context_id": context_id,
+            "rationale": action.rationale_summary,
+        }
+    )
+    _append_trace(
+        state,
+        "use_domain_skill",
+        "domain_skill_selected",
+        action.rationale_summary,
+        {
+            "skill_name": skill.name,
+            "context_id": context_id,
+            "active_domain_skills": state.active_domain_skills,
+        },
+    )
+    _finalize_runtime_node(state, context, "use_domain_skill")
+    return {"pwps_state": state}
 
 
 def call_tool_node(graph_state: GraphState) -> dict:

@@ -38,6 +38,7 @@ The system currently targets draft generation only. Do not claim that outputs ar
 - When the user says an instruction or design decision should be remembered for this project, record it in `AGENTS.md`; do not leave important project rules only in chat history.
 - Keep progress updates evidence-based: include the verification command, result, and any live smoke output path when relevant.
 - Do not mark a task complete in progress docs until the implementation and verification have actually run.
+- After each work cycle, clean up obvious junk code, temporary assertions, dead test scaffolding, unused imports, and accidental debug output before verification and commit.
 
 ## Current Stage
 
@@ -80,6 +81,7 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 - `pwps-agent auto-draft` now routes through the graph-backed `run_graph_auto_draft()` service by default; the older linear `run_auto_draft()` remains available for compatibility and legacy workflow tests.
 - The graph Supervisor now has an injectable planner seam and runtime config: deterministic auto-draft planning remains the default, while `SUPERVISOR_PLANNER=llm` injects `LLMSupervisorPlanner` to request structured `AgentAction` output from an LLM with Domain Skill context.
 - Supervisor action trace now records planner mode, and unsupported LLM-selected graph actions/tools are rejected before routing with failed-state finish behavior.
+- `USE_DOMAIN_SKILL` is now a graph action: active domain skills and skill-use history are stored in `PWPSState`, requested skill names are validated through the prompt loader, selections are traceable, and active skill context is injected into later LLM Supervisor prompts.
 - The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
 - Web search execution in the graph supports multiple planned queries through a bounded thread pool, per-query timeout handling, partial-success trace records, and per-query error/timeout trace events.
 - Web search providers now support instance-level query caching plus configurable transient-error retry/backoff, while avoiding retries for non-transient authorization failures.
@@ -98,6 +100,18 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 Recent verification:
 
 ```text
+uv run pytest tests/test_domain_skills.py tests/test_graph_supervisor_planner.py -q
+10 passed, 1 warning
+
+uv run pytest -q
+73 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
 15 passed, 1 warning
 
