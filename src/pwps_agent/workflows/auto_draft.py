@@ -149,14 +149,23 @@ def run_graph_auto_draft(
 ) -> AutoDraftResult:
     from pwps_agent.graph.builder import build_auto_draft_graph
     from pwps_agent.graph.state import GraphRuntimeContext
+    from pwps_agent.graph.supervisor import LLMSupervisorPlanner
 
     deps = dependencies or _build_dependencies(settings)
+    supervisor_planner = None
+    if settings.supervisor.planner == "llm":
+        supervisor_planner = LLMSupervisorPlanner(client=deps.llm_client)
     state = create_initial_state(requirement, "auto_draft", run_id=run_id)
     graph = build_auto_draft_graph()
     result = graph.invoke(
         {
             "pwps_state": state,
-            "context": GraphRuntimeContext(settings=settings, dependencies=deps),
+            "context": GraphRuntimeContext(
+                settings=settings,
+                dependencies=deps,
+                supervisor_planner=supervisor_planner,
+                supervisor_planner_mode=settings.supervisor.planner,
+            ),
         }
     )
     final_state = result["pwps_state"]

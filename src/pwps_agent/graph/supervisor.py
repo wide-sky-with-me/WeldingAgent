@@ -73,12 +73,20 @@ class LLMSupervisorPlanner:
             "field_statuses": {
                 name: field.status for name, field in state.fields.items()
             },
+            "pending_action": state.pending_action.model_dump()
+            if state.pending_action is not None
+            else None,
             "knowledge_query_count": len(state.knowledge_queries),
             "evidence_count": len(state.evidence),
-            "trace_nodes": [entry.get("node") for entry in state.trace],
+            "confirmation_count": len(state.confirmations),
+            "recent_trace": state.trace[-5:],
+            "risks": state.risks[-10:],
+            "field_report": state.field_report,
             "available_actions": [
                 "CALL_TOOL",
+                "ASK_USER",
                 "COMPOSE_DRAFT",
+                "GENERATE_REPORT",
                 "FINISH",
             ],
             "available_tools": AVAILABLE_GRAPH_TOOLS,
@@ -90,7 +98,35 @@ def supervisor_node(graph_state: GraphState) -> dict:
     state = graph_state["pwps_state"].model_copy(deep=True)
     context = graph_state["context"]
     planner = context.supervisor_planner or DeterministicAutoDraftPlanner()
+    planner_mode = context.supervisor_planner_mode
+    if planner_mode is None:
+        planner_mode = "injected" if context.supervisor_planner is not None else "deterministic"
     action = planner.plan_next_action(state)
+    validation_error = _validate_action(action)
+    if validation_error is not None:
+        invalid_action = action
+        state.status = "failed"
+        action = AgentAction(
+            action_type="FINISH",
+            rationale_summary=f"Invalid supervisor action: {validation_error}",
+            expected_state_change="Finish failed graph run.",
+            stop_reason="invalid_supervisor_action",
+        )
+        state.pending_action = action
+        state.actions.append(action)
+        state.trace.append(
+            {
+                "step": len(state.trace) + 1,
+                "node": "supervisor",
+                "event_type": "agent_action_invalid",
+                "summary": validation_error,
+                "payload": {
+                    "planner": planner_mode,
+                    "invalid_action": invalid_action.model_dump(),
+                },
+            }
+        )
+        return {"pwps_state": state}
     state.pending_action = action
     state.actions.append(action)
     state.trace.append(
@@ -103,10 +139,26 @@ def supervisor_node(graph_state: GraphState) -> dict:
                 "action_type": action.action_type,
                 "tool_name": action.tool_name,
                 "action_index": len(state.actions),
+                "planner": planner_mode,
             },
         }
     )
     return {"pwps_state": state}
+
+
+def _validate_action(action: AgentAction) -> str | None:
+    if action.action_type == "CALL_TOOL":
+        if action.tool_name not in AVAILABLE_GRAPH_TOOLS:
+            return f"Unsupported tool action: {action.tool_name}"
+    if action.action_type not in {
+        "CALL_TOOL",
+        "ASK_USER",
+        "COMPOSE_DRAFT",
+        "GENERATE_REPORT",
+        "FINISH",
+    }:
+        return f"Unsupported graph action: {action.action_type}"
+    return None
 
 
 def plan_next_auto_draft_action(state: PWPSState) -> AgentAction:

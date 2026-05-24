@@ -78,7 +78,8 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 - `auto_draft` runs requirement extraction, query planning, real web search, evidence conversion, field reasoning, Markdown rendering, field report rendering, trace persistence, and output persistence.
 - `graph/` now contains the first LangGraph runtime slice: deterministic Supervisor action planning, action routing, runtime tool execution, draft composition, finish handling, and injectable graph dependencies.
 - `pwps-agent auto-draft` now routes through the graph-backed `run_graph_auto_draft()` service by default; the older linear `run_auto_draft()` remains available for compatibility and legacy workflow tests.
-- The graph Supervisor now has an injectable planner seam: deterministic auto-draft planning remains the default, while `LLMSupervisorPlanner` can request structured `AgentAction` output from an LLM with Domain Skill context.
+- The graph Supervisor now has an injectable planner seam and runtime config: deterministic auto-draft planning remains the default, while `SUPERVISOR_PLANNER=llm` injects `LLMSupervisorPlanner` to request structured `AgentAction` output from an LLM with Domain Skill context.
+- Supervisor action trace now records planner mode, and unsupported LLM-selected graph actions/tools are rejected before routing with failed-state finish behavior.
 - The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
 - Web search execution in the graph supports multiple planned queries through a bounded thread pool, per-query timeout handling, partial-success trace records, and per-query error/timeout trace events.
 - Web search providers now support instance-level query caching plus configurable transient-error retry/backoff, while avoiding retries for non-transient authorization failures.
@@ -97,6 +98,18 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 Recent verification:
 
 ```text
+uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
+15 passed, 1 warning
+
+uv run pytest -q
+69 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_cli.py tests/test_graph_auto_draft.py tests/test_auto_draft_workflow.py -q
 9 passed, 1 warning
 

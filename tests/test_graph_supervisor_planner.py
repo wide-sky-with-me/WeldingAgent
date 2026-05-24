@@ -17,6 +17,16 @@ class PlannerReturningCompose:
         )
 
 
+class PlannerReturningUnsupportedTool:
+    def plan_next_action(self, state):
+        return AgentAction(
+            action_type="CALL_TOOL",
+            tool_name="unimplemented_tool",
+            rationale_summary="Try an unsupported tool.",
+            expected_state_change="Should be rejected.",
+        )
+
+
 class CapturingStructuredClient:
     def __init__(self):
         self.calls = []
@@ -75,6 +85,31 @@ def test_supervisor_node_uses_injected_planner(tmp_path: Path):
     assert supervisor_event["node"] == "supervisor"
     assert supervisor_event["payload"]["action_type"] == "COMPOSE_DRAFT"
     assert supervisor_event["payload"]["action_index"] == 1
+    assert supervisor_event["payload"]["planner"] == "injected"
+
+
+def test_supervisor_node_rejects_unsupported_tool_action(tmp_path: Path):
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="planner_validation",
+    )
+
+    result = supervisor_node(
+        {
+            "pwps_state": state,
+            "context": _context(tmp_path, planner=PlannerReturningUnsupportedTool()),
+        }
+    )
+
+    next_state = result["pwps_state"]
+    assert next_state.status == "failed"
+    assert next_state.pending_action is not None
+    assert next_state.pending_action.action_type == "FINISH"
+    assert next_state.pending_action.stop_reason == "invalid_supervisor_action"
+    invalid_event = next_state.trace[-1]
+    assert invalid_event["event_type"] == "agent_action_invalid"
+    assert "Unsupported tool" in invalid_event["summary"]
 
 
 def test_llm_supervisor_planner_requests_structured_agent_action():
@@ -90,6 +125,23 @@ def test_llm_supervisor_planner_requests_structured_agent_action():
         "thickness": "12mm",
         "welding_process": "GMAW",
     }
+    state.pending_action = AgentAction(
+        action_type="CALL_TOOL",
+        tool_name="requirement_understanding",
+        rationale_summary="Previous pending action.",
+        expected_state_change="Extract fields.",
+    )
+    state.risks.append({"field_id": "pwht", "severity": "medium", "message": "PWHT unknown."})
+    state.field_report = {"missing_fields": ["shielding_gas"]}
+    state.trace.append(
+        {
+            "step": 1,
+            "node": "requirement_understanding",
+            "event_type": "tool_result",
+            "summary": "Extracted core fields.",
+            "payload": {"success": True},
+        }
+    )
 
     action = planner.plan_next_action(state)
 
@@ -98,4 +150,8 @@ def test_llm_supervisor_planner_requests_structured_agent_action():
     assert client.calls[0]["schema"] is AgentAction
     assert "Domain Skill: pwps_auto_draft" in client.calls[0]["system_prompt"]
     assert "available_tools" in client.calls[0]["user_prompt"]
+    assert "pending_action" in client.calls[0]["user_prompt"]
+    assert "recent_trace" in client.calls[0]["user_prompt"]
+    assert "risks" in client.calls[0]["user_prompt"]
+    assert "field_report" in client.calls[0]["user_prompt"]
     assert "Q355B" in client.calls[0]["user_prompt"]

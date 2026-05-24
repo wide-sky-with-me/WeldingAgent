@@ -13,6 +13,7 @@ class GraphRuntimeContext:
     settings: Settings
     dependencies: AutoDraftDependencies
     supervisor_planner: Any | None = None
+    supervisor_planner_mode: str | None = None
     max_tool_retries: int = 0
     query_timeout_seconds: float | None = None
     max_parallel_queries: int = 4

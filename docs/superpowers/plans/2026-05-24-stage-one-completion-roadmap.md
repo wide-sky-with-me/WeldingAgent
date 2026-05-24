@@ -111,6 +111,8 @@ passed with no output
 
 ## Phase 2: Promote LLM Supervisor Planning From Seam To Runtime Option
 
+> **Status:** Completed. `SUPERVISOR_PLANNER=deterministic|llm` is now loaded from config, graph auto-draft injects `LLMSupervisorPlanner` in `llm` mode, Supervisor trace records planner mode, and unsupported LLM-selected graph actions/tools are rejected before routing.
+
 **Goal:** Make `LLMSupervisorPlanner` usable from CLI/config while preserving deterministic planner support for tests.
 
 **Why second:** Once graph is the default runtime, the next architectural gap is that the Supervisor is still mostly deterministic by default.
@@ -128,13 +130,13 @@ passed with no output
 
 **Work items:**
 
-- [ ] Add config for Supervisor planner mode, for example `SUPERVISOR_PLANNER=deterministic|llm`.
-- [ ] Wire CLI/runtime dependency construction so `llm` mode uses `LangChainStructuredClient`.
-- [ ] Expand `LLMSupervisorPlanner` prompt payload to include enough state for safe action choice: pending action, recent trace summaries, current risks, missing fields, confirmations, and available tools.
-- [ ] Keep available actions constrained to implemented graph actions only.
-- [ ] Add validation for unsupported tool/action combinations.
-- [ ] Add deterministic fake-client tests for LLM planner runtime selection.
-- [ ] Add trace assertions that planner mode and selected domain-skill context are recorded.
+- [x] Add config for Supervisor planner mode, for example `SUPERVISOR_PLANNER=deterministic|llm`.
+- [x] Wire CLI/runtime dependency construction so `llm` mode uses `LangChainStructuredClient`.
+- [x] Expand `LLMSupervisorPlanner` prompt payload to include enough state for safe action choice: pending action, recent trace summaries, current risks, missing fields, confirmations, and available tools.
+- [x] Keep available actions constrained to implemented graph actions only.
+- [x] Add validation for unsupported tool/action combinations.
+- [x] Add deterministic fake-client tests for LLM planner runtime selection.
+- [x] Add trace assertions that planner mode and selected domain-skill context are recorded.
 
 **Acceptance gates:**
 
@@ -155,6 +157,22 @@ For live LLM smoke, use the configured `.env` provider only after tests pass:
 
 ```text
 SUPERVISOR_PLANNER=llm uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-smoke --run-id llm_supervisor_smoke
+```
+
+Verification:
+
+```text
+uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
+15 passed, 1 warning
+
+uv run pytest -q
+69 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
 ```
 
 ## Phase 3: Add Active Domain Skill Selection And Traceable Skill Use

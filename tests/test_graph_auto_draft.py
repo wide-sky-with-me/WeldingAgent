@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from pwps_agent.config import Settings
-from pwps_agent.core.contracts import SearchResult, ToolResult
+from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
 from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.state import GraphRuntimeContext
@@ -84,6 +84,58 @@ class StaticReasoningTool:
             },
             summary="reasoned field",
         )
+
+
+class PlanningClient:
+    def __init__(self):
+        self.calls = []
+        self.actions = [
+            AgentAction(
+                action_type="CALL_TOOL",
+                tool_name="requirement_understanding",
+                rationale_summary="LLM selected requirement extraction.",
+                expected_state_change="Extract core fields.",
+            ),
+            AgentAction(
+                action_type="CALL_TOOL",
+                tool_name="knowledge_planning",
+                rationale_summary="LLM selected knowledge planning.",
+                expected_state_change="Plan evidence queries.",
+            ),
+            AgentAction(
+                action_type="CALL_TOOL",
+                tool_name="web_search",
+                rationale_summary="LLM selected web search.",
+                expected_state_change="Retrieve evidence.",
+            ),
+            AgentAction(
+                action_type="CALL_TOOL",
+                tool_name="field_reasoning",
+                rationale_summary="LLM selected field reasoning.",
+                expected_state_change="Create field candidates.",
+            ),
+            AgentAction(
+                action_type="COMPOSE_DRAFT",
+                rationale_summary="LLM selected draft composition.",
+                expected_state_change="Persist draft artifacts.",
+            ),
+            AgentAction(
+                action_type="FINISH",
+                rationale_summary="LLM selected finish.",
+                expected_state_change="Mark run done.",
+                stop_reason="llm_planner_test_complete",
+            ),
+        ]
+
+    def complete_structured(self, system_prompt, user_prompt, schema):
+        self.calls.append(
+            {
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "schema": schema,
+            }
+        )
+        return self.actions.pop(0)
 
 
 def test_auto_draft_graph_executes_tool_sequence_and_persists_artifacts(tmp_path: Path):
@@ -169,3 +221,33 @@ def test_run_graph_auto_draft_service_invokes_graph_and_persists_artifacts(tmp_p
         entry["node"] == "supervisor" and entry["event_type"] == "agent_action"
         for entry in result.state.trace
     )
+
+
+def test_run_graph_auto_draft_can_use_llm_supervisor_planner_from_settings(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    settings.supervisor.planner = "llm"
+    planning_client = PlanningClient()
+    dependencies = AutoDraftDependencies(
+        llm_client=planning_client,
+        search_provider=StaticSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=StaticReasoningTool(),
+    )
+
+    result = run_graph_auto_draft(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        settings=settings,
+        dependencies=dependencies,
+        run_id="llm_graph_service_test",
+    )
+
+    assert result.state.status == "done"
+    assert len(planning_client.calls) == 6
+    assert all(call["schema"] is AgentAction for call in planning_client.calls)
+    supervisor_events = [
+        entry for entry in result.state.trace if entry["node"] == "supervisor"
+    ]
+    assert supervisor_events[0]["payload"]["planner"] == "llm"
+    assert supervisor_events[0]["payload"]["tool_name"] == "requirement_understanding"
