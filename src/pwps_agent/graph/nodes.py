@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from pwps_agent.agent.prompt_loader import load_domain_skill
 from pwps_agent.core.contracts import SearchResult
-from pwps_agent.core.modes import build_confirmation_view
+from pwps_agent.core.modes import apply_supplement, build_confirmation_view
 from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.graph.state import GraphState
 from pwps_agent.render.markdown import render_field_report, render_pwps_draft
@@ -47,6 +47,48 @@ def use_domain_skill_node(graph_state: GraphState) -> dict:
         },
     )
     _finalize_runtime_node(state, context, "use_domain_skill")
+    return {"pwps_state": state}
+
+
+def update_state_node(graph_state: GraphState) -> dict:
+    state = graph_state["pwps_state"].model_copy(deep=True)
+    context = graph_state["context"]
+    action = state.pending_action
+    if action is None:
+        state.status = "failed"
+        _append_trace(state, "update_state", "error", "No pending state update action.", {})
+        _finalize_runtime_node(state, context, "update_state")
+        return {"pwps_state": state}
+
+    if action.tool_args.get("operation") != "supplement_update":
+        state.status = "failed"
+        _append_trace(
+            state,
+            "update_state",
+            "error",
+            f"Unsupported state update operation: {action.tool_args.get('operation')}",
+            {"tool_args": action.tool_args},
+        )
+        _finalize_runtime_node(state, context, "update_state")
+        return {"pwps_state": state}
+
+    field_values = dict(action.tool_args.get("fields", {}))
+    supplement = str(action.tool_args.get("supplement") or "")
+    if not supplement or not field_values:
+        state.status = "failed"
+        _append_trace(
+            state,
+            "update_state",
+            "error",
+            "supplement_update requires supplement text and fields.",
+            {"tool_args": action.tool_args},
+        )
+        _finalize_runtime_node(state, context, "update_state")
+        return {"pwps_state": state}
+
+    state = apply_supplement(state, supplement=supplement, field_values=field_values)
+    state.status = "running"
+    _finalize_runtime_node(state, context, "supplement_update")
     return {"pwps_state": state}
 
 

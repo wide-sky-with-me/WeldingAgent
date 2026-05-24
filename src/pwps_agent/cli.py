@@ -17,6 +17,10 @@ from pwps_agent.workflows.guided_confirmation import (
     resume_guided_confirmation,
     resume_guided_confirmation_from_checkpoint,
 )
+from pwps_agent.workflows.supplement_update import (
+    resume_supplement_update,
+    resume_supplement_update_from_checkpoint,
+)
 from pwps_agent.workflows.auto_draft import run_graph_auto_draft
 
 
@@ -61,6 +65,18 @@ def build_parser() -> argparse.ArgumentParser:
     guided_confirm_web.add_argument("state_path", type=Path)
     guided_confirm_web.add_argument("--host", default="127.0.0.1")
     guided_confirm_web.add_argument("--port", type=int, default=8765)
+
+    supplement_state = subparsers.add_parser("supplement-state")
+    supplement_state.add_argument("state_path", type=Path)
+    supplement_state.add_argument("--message", required=True)
+    supplement_state.add_argument("--set", dest="set_values", action="append", default=[])
+    supplement_state.add_argument("--output-dir", type=Path, default=None)
+
+    supplement_run = subparsers.add_parser("supplement-run")
+    supplement_run.add_argument("run_id")
+    supplement_run.add_argument("--message", required=True)
+    supplement_run.add_argument("--set", dest="set_values", action="append", default=[])
+    supplement_run.add_argument("--output-dir", type=Path, default=None)
     return parser
 
 
@@ -184,6 +200,46 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"pwps-agent: {exc}", file=sys.stderr)
             return 1
+
+    if args.command == "supplement-state":
+        settings = load_settings()
+        if args.output_dir is not None:
+            settings.paths.output_dir = args.output_dir
+        try:
+            state = load_state(args.state_path)
+            result = resume_supplement_update(
+                state,
+                {
+                    "supplement": args.message,
+                    "fields": _parse_set_values(args.set_values),
+                },
+                settings=settings,
+            )
+            save_state(args.state_path, result.state)
+        except Exception as exc:
+            print(f"pwps-agent: {exc}", file=sys.stderr)
+            return 1
+        print(result.output_dir)
+        return 0
+
+    if args.command == "supplement-run":
+        settings = load_settings()
+        if args.output_dir is not None:
+            settings.paths.output_dir = args.output_dir
+        try:
+            result = resume_supplement_update_from_checkpoint(
+                run_id=args.run_id,
+                payload={
+                    "supplement": args.message,
+                    "fields": _parse_set_values(args.set_values),
+                },
+                settings=settings,
+            )
+        except Exception as exc:
+            print(f"pwps-agent: {exc}", file=sys.stderr)
+            return 1
+        print(result.output_dir)
+        return 0
 
     parser.error(f"Unsupported command: {args.command}")
     return 2

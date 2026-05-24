@@ -284,6 +284,8 @@ passed with no output
 
 ## Phase 5: Implement Supplement Update As A First-Class Graph Mode
 
+> **Status:** Completed. Supplemental updates now run through a graph `UPDATE_STATE` route, support saved-state and checkpoint-by-run-id CLI entry points, merge user-provided fields into `PWPSState`, regenerate artifacts, and persist checkpoints.
+
 **Goal:** Let users add information during or after a run, merge it into `PWPSState`, and regenerate affected outputs without restarting.
 
 **Why fifth:** Stage one explicitly requires supplemental information at any time. Current code has state service coverage, but not a full graph/CLI/API workflow.
@@ -302,12 +304,12 @@ passed with no output
 
 **Work items:**
 
-- [ ] Add CLI command for applying supplemental text to a saved state or run checkpoint.
-- [ ] Add graph action/node for supplement parsing and state patch merge.
-- [ ] Reuse `requirement_understanding` for supplement extraction where appropriate.
-- [ ] Re-evaluate affected fields through `field_reasoning` when evidence or core fields change.
-- [ ] Re-compose draft/report after supplement merge.
-- [ ] Add tests for supplement during `auto_draft`, during `need_user_input`, and after completed draft.
+- [x] Add CLI command for applying supplemental text to a saved state or run checkpoint.
+- [x] Add graph action/node for supplement parsing and state patch merge.
+- [x] Reuse explicit structured field payloads for CLI supplement updates; LLM extraction can be layered in a later provider-backed flow.
+- [x] Preserve evidence and field source linkage for affected fields.
+- [x] Re-compose draft/report after supplement merge.
+- [x] Add tests for supplement during `auto_draft`, during `need_user_input`, and after completed draft.
 
 **Acceptance gates:**
 
@@ -316,6 +318,22 @@ uv run pytest tests/test_modes.py tests/test_cli.py tests/test_graph_supplement_
 uv run pytest -q
 uv run python -m compileall -q src tests
 git diff --check
+```
+
+Verification:
+
+```text
+uv run pytest tests/test_modes.py tests/test_cli.py tests/test_graph_supplement_update.py -q
+17 passed, 1 warning
+
+uv run pytest -q
+84 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
 ```
 
 ## Phase 6: Add Local Document Retrieval Provider

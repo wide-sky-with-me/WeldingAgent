@@ -162,9 +162,14 @@ def _validate_action(action: AgentAction) -> str | None:
     if action.action_type == "CALL_TOOL":
         if action.tool_name not in AVAILABLE_GRAPH_TOOLS:
             return f"Unsupported tool action: {action.tool_name}"
+    if action.action_type == "UPDATE_STATE":
+        operation = action.tool_args.get("operation")
+        if operation != "supplement_update":
+            return f"Unsupported state update operation: {operation}"
     if action.action_type not in {
         "USE_DOMAIN_SKILL",
         "CALL_TOOL",
+        "UPDATE_STATE",
         "ASK_USER",
         "COMPOSE_DRAFT",
         "GENERATE_REPORT",

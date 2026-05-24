@@ -94,6 +94,41 @@ def test_cli_parser_accepts_guided_confirmation_resume_run(tmp_path: Path) -> No
     assert args.output_dir == tmp_path
 
 
+def test_cli_parser_accepts_supplement_commands(tmp_path: Path) -> None:
+    parser = build_parser()
+    state_path = tmp_path / "pwps.json"
+
+    state_args = parser.parse_args(
+        [
+            "supplement-state",
+            str(state_path),
+            "--message",
+            "Base material is Q355B.",
+            "--set",
+            "base_material=Q355B",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    run_args = parser.parse_args(
+        [
+            "supplement-run",
+            "supplement_run",
+            "--message",
+            "Base material is Q355B.",
+            "--set",
+            "base_material=Q355B",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert state_args.command == "supplement-state"
+    assert state_args.state_path == state_path
+    assert run_args.command == "supplement-run"
+    assert run_args.run_id == "supplement_run"
+
+
 def test_cli_guided_confirmation_resume_writes_artifacts(tmp_path: Path, capsys) -> None:
     state_path = tmp_path / "state.json"
     state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation", run_id="cli_resume")
@@ -145,6 +180,56 @@ def test_cli_guided_confirmation_resume_run_loads_checkpoint(tmp_path: Path, cap
     assert exit_code == 0
     assert str(tmp_path / "cli_resume_run") in captured.out
     assert (tmp_path / "cli_resume_run" / "pwps_draft.md").exists()
+
+
+def test_cli_supplement_state_updates_saved_state_and_artifacts(tmp_path: Path, capsys) -> None:
+    state_path = tmp_path / "state.json"
+    state = create_initial_state("Generate pWPS draft.", "auto_draft", run_id="cli_supplement_state")
+    state.status = "done"
+    state_path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "supplement-state",
+            str(state_path),
+            "--message",
+            "Base material is Q355B.",
+            "--set",
+            "base_material=Q355B",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert str(tmp_path / "cli_supplement_state") in captured.out
+    assert (tmp_path / "cli_supplement_state" / "pwps_draft.md").exists()
+    assert "Q355B" in state_path.read_text(encoding="utf-8")
+
+
+def test_cli_supplement_run_loads_checkpoint(tmp_path: Path, capsys) -> None:
+    state = create_initial_state("Generate pWPS draft.", "auto_draft", run_id="cli_supplement_run")
+    state.status = "done"
+    save_checkpoint(state, tmp_path, "finish")
+
+    exit_code = main(
+        [
+            "supplement-run",
+            "cli_supplement_run",
+            "--message",
+            "Base material is Q355B.",
+            "--set",
+            "base_material=Q355B",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert str(tmp_path / "cli_supplement_run") in captured.out
+    assert (tmp_path / "cli_supplement_run" / "pwps.json").exists()
 
 
 def test_cli_auto_draft_uses_graph_runtime_by_default(monkeypatch, tmp_path: Path, capsys) -> None:
