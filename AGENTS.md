@@ -66,7 +66,7 @@ Out of scope for stage one:
 
 ## Current Implementation Progress
 
-As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and a minimal LangGraph auto-draft action loop:
+As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and a minimal LangGraph auto-draft action loop:
 
 - Core Pydantic contracts and initial `PWPSState` are implemented.
 - Provider-neutral `.env` loading is implemented for LLM, web search, and runtime paths.
@@ -84,6 +84,7 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 - `USE_DOMAIN_SKILL` is now a graph action: active domain skills and skill-use history are stored in `PWPSState`, requested skill names are validated through the prompt loader, selections are traceable, and active skill context is injected into later LLM Supervisor prompts.
 - The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
 - Web search execution in the graph supports multiple planned queries through a bounded thread pool, per-query timeout handling, partial-success trace records, and per-query error/timeout trace events.
+- Local document retrieval scans configured markdown/text files, ranks matching snippets, and emits `local_doc` search results and evidence through the graph `local_doc_search` tool.
 - Web search providers now support instance-level query caching plus configurable transient-error retry/backoff, while avoiding retries for non-transient authorization failures.
 - Evidence converted from web search now includes source-tier and confidence metadata, classifying references as official-standard, textbook, or webpage tier while preserving candidate/reference-only semantics.
 - Run persistence now writes `evidence_index.json` with retrieval context, evidence records, evidence-to-field mappings, and field-to-evidence mappings for reuse and audit.
@@ -102,6 +103,18 @@ As of 2026-05-24, the repository has a runnable `auto_draft` vertical slice and 
 Recent verification:
 
 ```text
+uv run pytest tests/test_local_doc_provider.py tests/test_local_doc_search.py tests/test_graph_auto_draft.py -q
+10 passed, 1 warning
+
+uv run pytest -q
+91 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_modes.py tests/test_cli.py tests/test_graph_supplement_update.py -q
 17 passed, 1 warning
 

@@ -66,7 +66,7 @@ class Evidence(BaseModel):
 class SearchResult(BaseModel):
     result_id: str
     query_id: str
-    source_type: Literal["web"] = "web"
+    source_type: Literal["web", "local_doc"] = "web"
     provider: str
     title: str | None = None
     url: str | None = None

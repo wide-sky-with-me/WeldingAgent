@@ -39,6 +39,11 @@ class SupervisorSettings(BaseModel):
     planner: Literal["deterministic", "llm"] = "deterministic"
 
 
+class LocalDocSettings(BaseModel):
+    max_results: int = 5
+    snippet_chars: int = 420
+
+
 class PathSettings(BaseModel):
     local_docs_dir: Path = Path("data/local_docs")
     output_dir: Path = Path("data/outputs")
@@ -49,6 +54,7 @@ class Settings(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     supervisor: SupervisorSettings = Field(default_factory=SupervisorSettings)
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
+    local_docs: LocalDocSettings = Field(default_factory=LocalDocSettings)
     paths: PathSettings = Field(default_factory=PathSettings)
 
 
@@ -86,6 +92,10 @@ def load_settings(env_file: str | Path = ".env") -> Settings:
             brave_country=values.get("BRAVE_SEARCH_COUNTRY", "us"),
             brave_lang=values.get("BRAVE_SEARCH_LANG", "en"),
             brave_safety=values.get("BRAVE_SEARCH_SAFETY", "moderate"),
+        ),
+        local_docs=LocalDocSettings(
+            max_results=_int(values.get("LOCAL_DOC_MAX_RESULTS"), 5),
+            snippet_chars=_int(values.get("LOCAL_DOC_SNIPPET_CHARS"), 420),
         ),
         paths=PathSettings(
             local_docs_dir=Path(values.get("PWPS_LOCAL_DOCS_DIR", "data/local_docs")),

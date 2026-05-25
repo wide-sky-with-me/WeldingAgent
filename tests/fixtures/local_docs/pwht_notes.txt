@@ -1,0 +1,3 @@
+PWHT note
+
+For first-stage pWPS drafts, post-weld heat treatment should remain candidate or needs confirmation unless backed by a standard-specific source.

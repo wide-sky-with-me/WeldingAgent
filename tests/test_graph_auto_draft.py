@@ -6,6 +6,7 @@ from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
 from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.state import GraphRuntimeContext
+from pwps_agent.knowledge.local_doc_provider import LocalDocumentProvider
 from pwps_agent.workflows.auto_draft import AutoDraftDependencies, run_graph_auto_draft
 
 
@@ -251,3 +252,53 @@ def test_run_graph_auto_draft_can_use_llm_supervisor_planner_from_settings(tmp_p
     ]
     assert supervisor_events[0]["payload"]["planner"] == "llm"
     assert supervisor_events[0]["payload"]["tool_name"] == "requirement_understanding"
+
+
+class LocalDocPlanningTool:
+    def __call__(self, state, client):
+        return ToolResult(
+            tool_name="knowledge_planning",
+            success=True,
+            state_patch={
+                "knowledge_queries": [
+                    {
+                        "query_id": "kq_local_001",
+                        "purpose": "similar_case",
+                        "query_text": "Q355B GMAW ER50-6 shielding gas",
+                        "target_fields": ["filler_material", "shielding_gas"],
+                        "rationale": "Find local reference snippets.",
+                        "preferred_sources": ["local_doc"],
+                    }
+                ]
+            },
+            summary="planned local query",
+        )
+
+
+def test_graph_auto_draft_collects_local_doc_evidence_and_persists_index(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    settings.paths.local_docs_dir = Path("tests/fixtures/local_docs")
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        local_doc_provider=LocalDocumentProvider(settings.paths.local_docs_dir),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=LocalDocPlanningTool(),
+        field_reasoning_tool=StaticReasoningTool(),
+    )
+    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="graph_local_doc_test",
+    )
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    final_state = result["pwps_state"]
+    run_dir = tmp_path / "graph_local_doc_test"
+    assert any(item.source_type == "local_doc" for item in final_state.evidence)
+    assert any(entry["node"] == "local_doc_search" for entry in final_state.trace)
+    evidence_index = json.loads((run_dir / "evidence_index.json").read_text(encoding="utf-8"))
+    assert any(item["source_type"] == "local_doc" for item in evidence_index["evidence"])

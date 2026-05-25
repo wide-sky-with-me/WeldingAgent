@@ -19,6 +19,7 @@ DEFAULT_DOMAIN_SKILLS = [
 AVAILABLE_GRAPH_TOOLS = [
     "requirement_understanding",
     "knowledge_planning",
+    "local_doc_search",
     "web_search",
     "field_reasoning",
 ]
@@ -191,6 +192,11 @@ def plan_next_auto_draft_action(state: PWPSState) -> AgentAction:
             "knowledge_planning",
             "Plan targeted evidence queries for missing or risky fields.",
         )
+    if "local_doc_search" not in completed_nodes and _has_local_doc_queries(state):
+        return _tool_action(
+            "local_doc_search",
+            "Search local documents for planned evidence references.",
+        )
     if "web_search" not in completed_nodes:
         return _tool_action(
             "web_search",
@@ -221,4 +227,11 @@ def _tool_action(tool_name: str, rationale: str) -> AgentAction:
         tool_name=tool_name,
         rationale_summary=rationale,
         expected_state_change=f"Run {tool_name} and merge its state patch.",
+    )
+
+
+def _has_local_doc_queries(state: PWPSState) -> bool:
+    return any(
+        "local_doc" in (query.get("preferred_sources") or [])
+        for query in state.knowledge_queries
     )

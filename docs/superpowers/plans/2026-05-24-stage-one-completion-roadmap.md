@@ -338,6 +338,8 @@ passed with no output
 
 ## Phase 6: Add Local Document Retrieval Provider
 
+> **Status:** Completed. Local document retrieval now scans configured markdown/text documents, ranks matching snippets, emits `local_doc` search results and evidence, and participates in the graph auto-draft evidence flow alongside web search.
+
 **Goal:** Implement local document retrieval as a real knowledge source alongside web search.
 
 **Why sixth:** The architecture and stage-one goals require local documents plus web references. Current implementation mostly covers web.
@@ -357,13 +359,13 @@ passed with no output
 
 **Work items:**
 
-- [ ] Define a simple local document result schema using existing `SearchResult`/`Evidence` contracts where possible.
-- [ ] Index or scan small deterministic fixture documents under `tests/fixtures/local_docs/`.
-- [ ] Implement keyword/BM25-style retrieval without adding a database dependency.
-- [ ] Convert local snippets into evidence with `source_type="local_doc"`.
-- [ ] Let knowledge planning target `local_doc`, `web`, or both.
-- [ ] Add graph tool routing for `local_doc_search`.
-- [ ] Add tests proving local evidence links to fields and appears in `evidence_index.json`.
+- [x] Define a simple local document result schema using existing `SearchResult`/`Evidence` contracts where possible.
+- [x] Index or scan small deterministic fixture documents under `tests/fixtures/local_docs/`.
+- [x] Implement keyword/BM25-style retrieval without adding a database dependency.
+- [x] Convert local snippets into evidence with `source_type="local_doc"`.
+- [x] Let knowledge planning target `local_doc`, `web`, or both.
+- [x] Add graph tool routing for `local_doc_search`.
+- [x] Add tests proving local evidence links to fields and appears in `evidence_index.json`.
 
 **Acceptance gates:**
 
@@ -372,6 +374,22 @@ uv run pytest tests/test_local_doc_provider.py tests/test_local_doc_search.py te
 uv run pytest -q
 uv run python -m compileall -q src tests
 git diff --check
+```
+
+Verification:
+
+```text
+uv run pytest tests/test_local_doc_provider.py tests/test_local_doc_search.py tests/test_graph_auto_draft.py -q
+10 passed, 1 warning
+
+uv run pytest -q
+91 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
 ```
 
 ## Phase 7: Split Section Generation And Risk Review Into Explicit Tools

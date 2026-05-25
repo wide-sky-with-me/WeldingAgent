@@ -11,6 +11,7 @@ from pwps_agent.render.markdown import render_field_report, render_pwps_draft
 from pwps_agent.storage.persist import persist_run_artifacts
 from pwps_agent.tools.evidence import search_results_to_evidence
 from pwps_agent.tools.field_reasoning import apply_field_candidates, infer_candidates_from_evidence
+from pwps_agent.tools.local_doc_search import search_local_documents
 from pwps_agent.workflows.auto_draft import _merge_state_patch
 
 
@@ -147,9 +148,35 @@ def call_tool_node(graph_state: GraphState) -> dict:
         _finalize_runtime_node(state, context, "knowledge_planning")
         return {"pwps_state": state}
 
+    if action.tool_name == "local_doc_search":
+        if deps.local_doc_provider is None:
+            state.status = "failed"
+            _append_trace(
+                state,
+                "local_doc_search",
+                "tool_error",
+                "No local document provider is configured.",
+                _tool_payload(state, "local_doc_search", False, context.max_tool_retries),
+            )
+            _finalize_runtime_node(state, context, "local_doc_search")
+            return {"pwps_state": state}
+        result = search_local_documents(state, deps.local_doc_provider)
+        state.status = "running"
+        state = _merge_state_patch(state, result.state_patch)
+        _append_trace(
+            state,
+            "local_doc_search",
+            "tool_result",
+            result.summary,
+            _tool_payload(state, "local_doc_search", result.success, context.max_tool_retries),
+        )
+        _finalize_runtime_node(state, context, "local_doc_search")
+        return {"pwps_state": state}
+
     if action.tool_name == "web_search":
         search_results = _run_search_queries(state, context, deps.search_provider)
-        if not search_results and state.knowledge_queries:
+        web_queries = _web_queries(state.knowledge_queries)
+        if not search_results and web_queries:
             payload = _tool_payload(state, "web_search", False, context.max_tool_retries)
             state.status = "failed"
             _append_trace(
@@ -317,13 +344,14 @@ def _execute_tool_action(state, max_retries: int, node: str, call):
 
 
 def _run_search_queries(state, context, search_provider) -> list[SearchResult]:
-    if not state.knowledge_queries:
+    queries = _web_queries(state.knowledge_queries)
+    if not queries:
         return []
     search_results: list[SearchResult] = []
     executor = ThreadPoolExecutor(max_workers=max(1, context.max_parallel_queries))
     future_by_query = {}
     try:
-        for query in state.knowledge_queries:
+        for query in queries:
             query_text = str(query["query_text"])
             query_id = str(query["query_id"])
             future_by_query[
@@ -362,6 +390,14 @@ def _run_search_queries(state, context, search_provider) -> list[SearchResult]:
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
     return search_results
+
+
+def _web_queries(knowledge_queries: list[dict]) -> list[dict]:
+    return [
+        query
+        for query in knowledge_queries
+        if "local_doc" not in (query.get("preferred_sources") or [])
+    ]
 
 
 def _tool_payload(state, node: str, success: bool, max_retries: int) -> dict:

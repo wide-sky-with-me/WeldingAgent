@@ -9,6 +9,7 @@ from pwps_agent.config import Settings
 from pwps_agent.core.contracts import SearchResult, ToolResult
 from pwps_agent.core.state_merge import merge_state_patch
 from pwps_agent.core.state import PWPSState, create_initial_state
+from pwps_agent.knowledge.local_doc_provider import LocalDocumentProvider
 from pwps_agent.knowledge.web_search_provider import WebSearchProvider, build_web_search_provider
 from pwps_agent.llm.langchain_client import LangChainStructuredClient
 from pwps_agent.render.markdown import render_field_report, render_pwps_draft
@@ -20,6 +21,7 @@ from pwps_agent.tools.field_reasoning import (
     reason_fields_from_evidence,
 )
 from pwps_agent.tools.knowledge_planning import plan_knowledge_queries
+from pwps_agent.tools.local_doc_search import search_local_documents
 from pwps_agent.tools.requirement_understanding import understand_requirement
 
 
@@ -47,6 +49,7 @@ class FieldReasoningTool(Protocol):
 class AutoDraftDependencies:
     llm_client: object
     search_provider: SearchProvider
+    local_doc_provider: SearchProvider | None = None
     requirement_tool: RequirementTool = understand_requirement
     knowledge_planning_tool: KnowledgePlanningTool = plan_knowledge_queries
     field_reasoning_tool: FieldReasoningTool = reason_fields_from_evidence
@@ -90,8 +93,21 @@ def run_auto_draft(
         }
     )
 
+    if deps.local_doc_provider is not None:
+        local_result = search_local_documents(state, deps.local_doc_provider)
+        state = _merge_state_patch(state, local_result.state_patch)
+        state.trace.append(
+            {
+                "step": len(state.trace) + 1,
+                "node": "local_doc_search",
+                "event_type": "tool_result",
+                "summary": local_result.summary,
+                "payload": {"success": local_result.success},
+            }
+        )
+
     search_results: list[SearchResult] = []
-    for query in state.knowledge_queries:
+    for query in _web_queries(state.knowledge_queries):
         query_text = str(query["query_text"])
         query_id = str(query["query_id"])
         search_results.extend(deps.search_provider.search(query_text, query_id))
@@ -179,8 +195,21 @@ def _build_dependencies(settings: Settings) -> AutoDraftDependencies:
     return AutoDraftDependencies(
         llm_client=LangChainStructuredClient(settings.llm),
         search_provider=build_web_search_provider(settings.web_search),
+        local_doc_provider=LocalDocumentProvider(
+            settings.paths.local_docs_dir,
+            max_results=settings.local_docs.max_results,
+            snippet_chars=settings.local_docs.snippet_chars,
+        ),
     )
 
 
 def _merge_state_patch(state: PWPSState, patch: dict) -> PWPSState:
     return merge_state_patch(state, patch)
+
+
+def _web_queries(knowledge_queries: list[dict]) -> list[dict]:
+    return [
+        query
+        for query in knowledge_queries
+        if "local_doc" not in (query.get("preferred_sources") or [])
+    ]
