@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from pwps_agent.core.eval_metrics import compute_agent_metrics
 from pwps_agent.core.state import PWPSState
 
 
@@ -32,6 +33,10 @@ def persist_run_artifacts(
             json.dumps(state.quality_report, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+    (run_dir / "agent_metrics.json").write_text(
+        json.dumps(compute_agent_metrics(state), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (run_dir / "trace.json").write_text(
         json.dumps(state.trace, ensure_ascii=False, indent=2),
         encoding="utf-8",

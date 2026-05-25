@@ -13,6 +13,7 @@ from pwps_agent.knowledge.local_doc_provider import LocalDocumentProvider
 from pwps_agent.knowledge.web_search_provider import build_web_search_provider
 from pwps_agent.llm.langchain_client import LangChainStructuredClient
 from pwps_agent.tools.field_reasoning import reason_fields_from_evidence
+from pwps_agent.tools.guided_options import build_guided_options
 from pwps_agent.tools.knowledge_planning import plan_knowledge_queries
 from pwps_agent.tools.requirement_understanding import understand_requirement
 
@@ -39,6 +40,11 @@ class FieldReasoningTool(Protocol):
         ...
 
 
+class GuidedOptionsTool(Protocol):
+    def __call__(self, state: PWPSState, client: object) -> ToolResult:
+        ...
+
+
 @dataclass
 class AutoDraftDependencies:
     llm_client: object
@@ -47,11 +53,17 @@ class AutoDraftDependencies:
     requirement_tool: RequirementTool = understand_requirement
     knowledge_planning_tool: KnowledgePlanningTool = plan_knowledge_queries
     field_reasoning_tool: FieldReasoningTool = reason_fields_from_evidence
+    guided_options_tool: GuidedOptionsTool = build_guided_options
 
 
 class AutoDraftResult(BaseModel):
     state: PWPSState
     output_dir: str
+
+
+class DisabledSearchProvider:
+    def search(self, query: str, query_id: str) -> list[SearchResult]:
+        return []
 
 
 def run_graph_auto_draft(
@@ -132,10 +144,18 @@ def run_graph_draft(
 def _build_dependencies(settings: Settings) -> AutoDraftDependencies:
     return AutoDraftDependencies(
         llm_client=LangChainStructuredClient(settings.llm),
-        search_provider=build_web_search_provider(settings.web_search),
-        local_doc_provider=LocalDocumentProvider(
-            settings.paths.local_docs_dir,
-            max_results=settings.local_docs.max_results,
-            snippet_chars=settings.local_docs.snippet_chars,
+        search_provider=(
+            build_web_search_provider(settings.web_search)
+            if settings.knowledge.web_enabled
+            else DisabledSearchProvider()
+        ),
+        local_doc_provider=(
+            LocalDocumentProvider(
+                settings.paths.local_docs_dir,
+                max_results=settings.local_docs.max_results,
+                snippet_chars=settings.local_docs.snippet_chars,
+            )
+            if settings.knowledge.local_doc_enabled
+            else None
         ),
     )

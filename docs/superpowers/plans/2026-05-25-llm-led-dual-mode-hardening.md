@@ -52,7 +52,7 @@ LLM dependence is intentional. The work is not to demote the LLM, but to give th
 - Modify: `src/pwps_agent/graph/supervisor.py`
 - Test: `tests/test_interaction_gates.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 from pwps_agent.core.interaction import missing_minimum_auto_draft_fields, should_interrupt_for_initial_info
@@ -78,19 +78,19 @@ def test_auto_draft_does_not_interrupt_after_retrieval_started():
     assert should_interrupt_for_initial_info(state) is False
 ```
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run: `uv run pytest tests/test_interaction_gates.py -q`
 
-- [ ] **Step 3: Implement gate**
+- [x] **Step 3: Implement gate**
 
 Add `MINIMUM_AUTO_DRAFT_FIELDS` and two functions in `core/interaction.py`. Use `PWPSState.fields[field_id].value` and `status in {"filled", "user_confirmed"}` as the initial adequacy check. Treat any trace node other than `supervisor` as workflow-started.
 
-- [ ] **Step 4: Wire Supervisor**
+- [x] **Step 4: Wire Supervisor**
 
 In `graph/supervisor.py`, before normal safe-next progression, if `state.interaction_mode == "auto_draft"` and `should_interrupt_for_initial_info(state)` is true, return `ASK_USER` with a concise missing-field question. Keep the existing rule that later `ASK_USER` in `auto_draft` is overridden.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `uv run pytest tests/test_interaction_gates.py tests/test_graph_supervisor_planner.py -q`
 
@@ -102,7 +102,7 @@ Run: `uv run pytest tests/test_interaction_gates.py tests/test_graph_supervisor_
 - Modify: `src/pwps_agent/core/state_merge.py`
 - Test: `tests/test_publishability.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 from pwps_agent.core.publishability import publishability_for_field
@@ -128,19 +128,19 @@ def test_web_candidate_is_reference_only_until_confirmed():
     assert publishability_for_field(field) == "reference_only"
 ```
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run: `uv run pytest tests/test_publishability.py -q`
 
-- [ ] **Step 3: Implement publishability helper**
+- [x] **Step 3: Implement publishability helper**
 
 Create `Publishability = Literal["draft_publishable", "needs_confirmation", "reference_only", "blocked"]`. Map user-confirmed and user-input `filled` fields to `draft_publishable`; web/local/model candidates to `reference_only` or `needs_confirmation`; blocked metadata without user source to `blocked`.
 
-- [ ] **Step 4: Add field metadata without breaking persisted state**
+- [x] **Step 4: Add field metadata without breaking persisted state**
 
 Add optional `publishability: str | None = None` to `FieldState`. In `state_merge.py`, after each field patch, set `field.publishability = publishability_for_field(field)`.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `uv run pytest tests/test_publishability.py tests/test_state_merge.py tests/test_render.py -q`
 
@@ -152,7 +152,7 @@ Run: `uv run pytest tests/test_publishability.py tests/test_state_merge.py tests
 - Modify: `src/pwps_agent/tools/risk_report.py`
 - Test: `tests/test_evidence_policy.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 from pwps_agent.core.contracts import Evidence
@@ -176,19 +176,19 @@ def test_webpage_only_evidence_cannot_promote_key_choice():
     assert may_promote_candidate(evidence, requires_human_confirmation=True) is False
 ```
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run: `uv run pytest tests/test_evidence_policy.py -q`
 
-- [ ] **Step 3: Implement policy**
+- [x] **Step 3: Implement policy**
 
 Use source tier and confidence only. Do not inspect welding content. Return `strong`, `medium`, or `weak`; require human confirmation for key choices regardless of evidence strength in `guided_confirmation`.
 
-- [ ] **Step 4: Wire verifier/risk report**
+- [x] **Step 4: Wire verifier/risk report**
 
 Use the policy to mark weak evidence fields, key-choice confirmation requirements, and low-quality source risks. Do not auto-upgrade web/model values to `filled`.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `uv run pytest tests/test_evidence_policy.py tests/test_draft_quality.py tests/test_risk_report.py -q`
 
@@ -202,7 +202,7 @@ Run: `uv run pytest tests/test_evidence_policy.py tests/test_draft_quality.py te
 - Modify: `src/pwps_agent/domain_skills/pwps_guided_confirmation.md`
 - Test: `tests/test_guided_options.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 from pwps_agent.core.contracts import ToolResult
@@ -224,19 +224,19 @@ def test_guided_options_include_recommendation_and_confirmation_requirement():
     assert result.state_patch["fields"]["welding_process"]["candidates"][0]["recommended"] is True
 ```
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run: `uv run pytest tests/test_guided_options.py -q`
 
-- [ ] **Step 3: Implement structured output schemas**
+- [x] **Step 3: Implement structured output schemas**
 
 Create `GuidedOption` and `GuidedOptionSet` Pydantic models. The LLM may generate options and recommendations, but the merge result must keep the field `need_confirmation` until the user confirms.
 
-- [ ] **Step 4: Wire graph action**
+- [x] **Step 4: Wire graph action**
 
 Add `guided_options` to available graph tools. In guided mode, Supervisor should request it before `ASK_USER` when key fields are missing or have multiple candidates.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `uv run pytest tests/test_guided_options.py tests/test_graph_guided_confirmation.py tests/test_guided_confirmation.py -q`
 
@@ -247,23 +247,23 @@ Run: `uv run pytest tests/test_guided_options.py tests/test_graph_guided_confirm
 - Modify: `src/pwps_agent/graph/supervisor.py`
 - Test: `tests/test_graph_supervisor_planner.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add tests proving a repeated completed action, premature finish, and invalid auto-draft interruption are handled by `GraphPolicy.resolve(action, state)` and recorded with reason codes: `completed_action`, `premature_finish`, `auto_draft_initial_gate`, `guided_confirmation_required`.
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run: `uv run pytest tests/test_graph_supervisor_planner.py -q`
 
-- [ ] **Step 3: Move override logic**
+- [x] **Step 3: Move override logic**
 
 Move `_override_repeated_completed_action`, `_needs_refinement_planning`, `_needs_guided_confirmation_pause`, and related helpers into `graph/policy.py`. Keep `supervisor.py` responsible for calling the LLM planner, validating schema, applying policy, and recording trace.
 
-- [ ] **Step 4: Preserve trace vocabulary**
+- [x] **Step 4: Preserve trace vocabulary**
 
 Keep existing `agent_action_overridden` events, but add `reason_code` to payload. Do not remove old fields used by current tests.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `uv run pytest tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_graph_guided_confirmation.py -q`
 
@@ -274,7 +274,7 @@ Run: `uv run pytest tests/test_graph_supervisor_planner.py tests/test_graph_auto
 - Modify: `src/pwps_agent/storage/persist.py`
 - Test: `tests/test_eval_metrics.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 from pwps_agent.core.eval_metrics import compute_agent_metrics
@@ -293,42 +293,75 @@ def test_metrics_count_override_and_field_statuses():
     assert metrics["override_reason_counts"]["completed_action"] == 1
 ```
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run: `uv run pytest tests/test_eval_metrics.py -q`
 
-- [ ] **Step 3: Implement metrics**
+- [x] **Step 3: Implement metrics**
 
 Compute field status counts, confirmation counts, weak evidence count from `quality_report`, override count, override reason counts, refinement attempts, and final status. Return plain JSON-serializable dict.
 
-- [ ] **Step 4: Persist metrics**
+- [x] **Step 4: Persist metrics**
 
 Write `agent_metrics.json` next to `quality_report.json` and add `agent_metrics` to `pwps.json` only if the `PWPSState` schema gets the field. Prefer separate artifact first to avoid schema churn.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `uv run pytest tests/test_eval_metrics.py tests/test_graph_auto_draft.py tests/test_draft_quality.py -q`
 
 ## Final Verification
 
-- [ ] Run focused mode tests:
+- [x] Run focused mode tests:
 
 ```bash
 uv run pytest tests/test_interaction_gates.py tests/test_publishability.py tests/test_evidence_policy.py tests/test_guided_options.py tests/test_eval_metrics.py -q
 ```
 
-- [ ] Run graph regression tests:
+- [x] Run graph regression tests:
 
 ```bash
 uv run pytest tests/test_graph_auto_draft.py tests/test_graph_guided_confirmation.py tests/test_graph_supervisor_planner.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py -q
 ```
 
-- [ ] Run full verification:
+- [x] Run full verification:
 
 ```bash
 uv run pytest -q
 uv run python -m compileall -q src tests
 git diff --check
+```
+
+Verified on 2026-05-25:
+
+```bash
+uv run pytest tests/test_interaction_gates.py tests/test_publishability.py tests/test_evidence_policy.py tests/test_guided_options.py tests/test_eval_metrics.py -q
+11 passed
+
+uv run pytest tests/test_graph_auto_draft.py tests/test_graph_guided_confirmation.py tests/test_graph_supervisor_planner.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py -q
+43 passed
+
+uv run pytest -q
+159 passed
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+```
+
+End-to-end CLI smoke used a local OpenAI-compatible stub at `127.0.0.1:18080`
+to avoid sending repository prompts or `.env` credentials to an external LLM:
+
+```bash
+LLM_API_KEY=stub LLM_BASE_URL=http://127.0.0.1:18080/v1 LLM_MODEL=stub KNOWLEDGE_SOURCES=model uv run pwps-agent auto-draft ... --output-dir /tmp/pwps-agent-e2e-hardening --run-id auto_dual_mode_hardening
+auto result: status=done; draft contains filler, gas, polarity, current, voltage, travel speed, heat input, preheat, interpass, and PWHT draft values.
+
+LLM_API_KEY=stub LLM_BASE_URL=http://127.0.0.1:18080/v1 LLM_MODEL=stub KNOWLEDGE_SOURCES=model uv run pwps-agent guided-draft ... --run-id guided_dual_mode_hardening3
+guided pause result: status=need_user_input; guided_options produced recommended options for key fields.
+
+uv run pwps-agent guided-confirm-resume /tmp/pwps-agent-e2e-hardening/guided_dual_mode_hardening3/pwps.json ...
+guided final result: status=done; user_confirmed=12; no candidate/suggested/need_confirmation/conflict fields remain; quality report refreshed after confirmation.
 ```
 
 ## Progress
@@ -340,9 +373,9 @@ git diff --check
 - [x] Verified repository with `uv run pytest -q`: 142 passed.
 - [x] Verified syntax with `uv run python -m compileall -q src tests`: passed.
 - [x] Verified patch hygiene with `git diff --check`: passed with no output.
-- [ ] Implement Task 1 initial information gate.
-- [ ] Implement Task 2 state/publishability separation.
-- [ ] Implement Task 3 evidence policy.
-- [ ] Implement Task 4 guided option recommendation.
-- [ ] Implement Task 5 Supervisor policy split.
-- [ ] Implement Task 6 agent eval metrics.
+- [x] Implement Task 1 initial information gate.
+- [x] Implement Task 2 state/publishability separation.
+- [x] Implement Task 3 evidence policy.
+- [x] Implement Task 4 guided option recommendation.
+- [x] Implement Task 5 Supervisor policy split.
+- [x] Implement Task 6 agent eval metrics.

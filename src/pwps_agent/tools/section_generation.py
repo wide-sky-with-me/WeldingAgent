@@ -18,6 +18,7 @@ class SectionField(BaseModel):
     confidence: str
     evidence_ids: list[str] = Field(default_factory=list)
     source: dict[str, Any] | None = None
+    publishability: str | None = None
     note: str = ""
 
 
@@ -42,6 +43,7 @@ def generate_sections(state: PWPSState) -> ToolResult:
                     confidence=field.confidence,
                     evidence_ids=list(field.evidence_ids),
                     source=field.source,
+                    publishability=field.publishability,
                     note=field.note or "",
                 )
             )

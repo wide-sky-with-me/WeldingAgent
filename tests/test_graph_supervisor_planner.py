@@ -4,6 +4,7 @@ from pwps_agent.config import Settings
 from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
 from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
+from pwps_agent.graph.policy import GraphPolicy
 from pwps_agent.graph.state import GraphRuntimeContext
 from pwps_agent.graph.nodes import use_domain_skill_node
 from pwps_agent.graph.supervisor import LLMSupervisorPlanner, supervisor_node
@@ -340,9 +341,80 @@ def test_graph_overrides_repeated_completed_llm_tool_action(tmp_path: Path):
     assert any(
         entry["node"] == "supervisor"
         and entry["event_type"] == "agent_action_overridden"
+        and entry["payload"]["reason_code"] == "completed_action"
         and entry["payload"]["requested_tool_name"] == "requirement_understanding"
         for entry in final_state.trace
     )
+
+
+def test_graph_policy_resolves_completed_action_with_reason_code():
+    state = create_initial_state("Q355B 12mm GMAW", "auto_draft")
+    state.trace.append({"node": "requirement_understanding", "event_type": "tool_result"})
+    action = AgentAction(
+        action_type="CALL_TOOL",
+        tool_name="requirement_understanding",
+        rationale_summary="repeat",
+    )
+
+    decision = GraphPolicy(planner_mode="llm").resolve(action, state)
+
+    assert decision.overridden is True
+    assert decision.reason_code == "completed_action"
+    assert decision.action.tool_name == "knowledge_planning"
+
+
+def test_graph_policy_resolves_premature_finish_with_reason_code():
+    state = create_initial_state("Q355B 12mm GMAW", "auto_draft")
+    state.trace.append({"node": "field_reasoning", "event_type": "tool_result"})
+    action = AgentAction(action_type="FINISH", rationale_summary="finish")
+
+    decision = GraphPolicy(planner_mode="llm").resolve(action, state)
+
+    assert decision.overridden is True
+    assert decision.reason_code == "premature_finish"
+    assert decision.action.action_type == "VERIFY_DRAFT"
+
+
+def test_graph_policy_resolves_auto_draft_initial_gate_with_reason_code():
+    state = create_initial_state("Need a pWPS draft", "auto_draft")
+    action = AgentAction(action_type="COMPOSE_DRAFT", rationale_summary="compose")
+
+    decision = GraphPolicy(planner_mode="llm").resolve(action, state)
+
+    assert decision.overridden is True
+    assert decision.reason_code == "auto_draft_initial_gate"
+    assert decision.action.action_type == "ASK_USER"
+
+
+def test_graph_policy_resolves_guided_confirmation_required_with_reason_code():
+    state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation")
+    state.quality_report = {
+        "quality_level": "partial",
+        "recommended_action": "synthesize",
+        "field_counts": {},
+        "critical_missing_fields": [],
+        "weak_evidence_fields": ["shielding_gas"],
+        "low_quality_sources": [],
+        "blocked_inference_violations": [],
+        "refinement_focus_fields": [],
+        "human_review_fields": ["shielding_gas"],
+        "mode_guidance": "ask_user_for_confirmation",
+        "target_field_coverage": [],
+        "evidence_quality": {
+            "evidence_count": 0,
+            "by_source_tier": {},
+            "by_source_type": {},
+            "low_quality_sources": [],
+        },
+        "notes": [],
+    }
+    action = AgentAction(action_type="FINISH", rationale_summary="finish")
+
+    decision = GraphPolicy().resolve(action, state)
+
+    assert decision.overridden is True
+    assert decision.reason_code == "guided_confirmation_required"
+    assert decision.action.action_type == "ASK_USER"
 
 
 def test_graph_finishes_auto_draft_when_planner_asks_user_after_compose(tmp_path: Path):
@@ -367,6 +439,7 @@ def test_graph_finishes_auto_draft_when_planner_asks_user_after_compose(tmp_path
     assert any(
         entry["node"] == "supervisor"
         and entry["event_type"] == "agent_action_overridden"
+        and entry["payload"]["reason_code"] == "completed_action"
         and entry["payload"]["requested_action_type"] == "ASK_USER"
         and entry["payload"]["replacement_action_type"] == "FINISH"
         for entry in final_state.trace
@@ -389,13 +462,10 @@ def test_graph_auto_draft_overrides_planner_asking_user_before_compose(tmp_path:
 
     next_state = result["pwps_state"]
     assert next_state.pending_action is not None
-    assert next_state.pending_action.action_type == "CALL_TOOL"
-    assert next_state.pending_action.tool_name == "requirement_understanding"
+    assert next_state.pending_action.action_type == "ASK_USER"
     assert next_state.trace[-2]["event_type"] == "agent_action_overridden"
     assert next_state.trace[-2]["payload"]["requested_action_type"] == "ASK_USER"
-    assert next_state.trace[-2]["payload"]["replacement_tool_name"] == (
-        "requirement_understanding"
-    )
+    assert next_state.trace[-2]["payload"]["reason_code"] == "auto_draft_initial_gate"
 
 
 def test_graph_guided_mode_asks_user_after_compose_when_candidates_remain(tmp_path: Path):

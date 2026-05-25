@@ -5,6 +5,7 @@ from typing import Any
 
 from pwps_agent.core.fields import FIELD_DEFINITIONS
 from pwps_agent.core.contracts import ConfirmationRecord, Evidence
+from pwps_agent.core.publishability import publishability_for_field
 from pwps_agent.core.state import PWPSState
 
 
@@ -106,6 +107,7 @@ def confirm_fields(
             "user_note": user_message,
             "user_rationale": user_rationale,
         }
+        field.publishability = publishability_for_field(field)
 
     record = ConfirmationRecord(
         confirmation_id=f"confirm_{len(updated.confirmations) + 1}",
@@ -220,6 +222,7 @@ def apply_supplement(
         field.source = {"type": "user_input", "ref": evidence_id}
         if evidence_id not in field.evidence_ids:
             field.evidence_ids.append(evidence_id)
+        field.publishability = publishability_for_field(field)
 
     updated.trace.append(
         {
@@ -331,6 +334,7 @@ def _field_snapshot(field) -> dict[str, Any]:
         "confidence": field.confidence,
         "status": field.status,
         "note": field.note,
+        "publishability": field.publishability,
     }
 
 

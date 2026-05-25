@@ -91,6 +91,65 @@ def test_resume_guided_confirmation_pauses_again_when_candidates_remain(tmp_path
     assert (tmp_path / "guided_multi_turn" / "checkpoints" / "latest.json").exists()
 
 
+def test_resume_guided_confirmation_reverifies_after_final_confirmation(
+    tmp_path: Path,
+) -> None:
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW",
+        "guided_confirmation",
+        run_id="guided_reverify",
+    )
+    state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
+    state.fields["shielding_gas"].value = "80% Ar / 20% CO2"
+    state.fields["shielding_gas"].status = "candidate"
+    state.quality_report = {
+        "quality_level": "partial",
+        "recommended_action": "synthesize",
+        "field_counts": {"candidate": 1},
+        "critical_missing_fields": [],
+        "weak_evidence_fields": ["shielding_gas"],
+        "low_quality_sources": [],
+        "blocked_inference_violations": [],
+        "refinement_focus_fields": [],
+        "human_review_fields": ["shielding_gas"],
+        "mode_guidance": "ask_user_for_confirmation",
+        "target_field_coverage": [],
+        "evidence_quality": {
+            "evidence_count": 0,
+            "by_source_tier": {},
+            "by_source_type": {},
+            "low_quality_sources": [],
+        },
+        "notes": [],
+    }
+    state.trace.append({"node": "draft_verifier", "event_type": "tool_result"})
+
+    result = resume_guided_confirmation(
+        state,
+        {
+            "fields": {"shielding_gas": "80% Ar / 20% CO2"},
+            "message": "Confirm gas.",
+            "action": "accepted",
+        },
+        settings=settings,
+    )
+
+    assert result.state.status == "done"
+    assert result.state.quality_report["field_counts"]["user_confirmed"] == 1
+    resume_index = max(
+        index
+        for index, entry in enumerate(result.state.trace)
+        if entry["node"] == "guided_confirmation_resume"
+    )
+    assert any(
+        entry["node"] == "draft_verifier"
+        for entry in result.state.trace[resume_index + 1 :]
+    )
+
+
 def test_resume_guided_confirmation_pauses_again_for_suggested_conflict_or_candidate_options(
     tmp_path: Path,
 ) -> None:

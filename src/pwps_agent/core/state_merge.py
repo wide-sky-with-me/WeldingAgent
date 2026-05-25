@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from pwps_agent.core.contracts import Evidence
 from pwps_agent.core.fields import FieldState
+from pwps_agent.core.publishability import publishability_for_field
 from pwps_agent.core.quality import DraftQualityReport
 from pwps_agent.core.state import PWPSState
 
@@ -130,6 +131,7 @@ def _merge_fields(state: PWPSState, fields_patch: dict[str, dict[str, Any]]) -> 
         if field.source is None:
             field.source = {}
         field.source.setdefault("updated_at", _now_iso())
+        field.publishability = publishability_for_field(field)
 
 
 def _normalize_field_patch(

@@ -16,6 +16,7 @@ class FieldState(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     confirmation: dict[str, Any] = Field(default_factory=dict)
     confidence: Literal["high", "medium", "low", "unknown"] = "unknown"
+    publishability: str | None = None
     status: Literal[
         "missing",
         "filled",

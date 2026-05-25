@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from pwps_agent.core.state import PWPSState
 from pwps_agent.core.contracts import ToolResult
+from pwps_agent.core.evidence_policy import evidence_strength, may_promote_candidate
 
 
 THERMAL_FIELDS = {
@@ -15,6 +16,20 @@ THERMAL_FIELDS = {
     "pwht",
     "holding_temperature",
     "holding_time",
+}
+
+KEY_CHOICE_FIELDS = {
+    "applicable_standard",
+    "base_material",
+    "workpiece_type",
+    "welding_process",
+    "joint_type",
+    "welding_position",
+    "filler_material",
+    "shielding_gas",
+    "preheat_temperature",
+    "interpass_temperature",
+    "pwht",
 }
 
 
@@ -44,6 +59,11 @@ def _risk_items(state: PWPSState) -> list[RiskItem]:
     risks: list[RiskItem] = []
     evidence_by_id = {item.evidence_id: item for item in state.evidence}
     for field in state.fields.values():
+        linked_evidence = [
+            evidence_by_id[evidence_id]
+            for evidence_id in field.evidence_ids
+            if evidence_id in evidence_by_id
+        ]
         if field.status == "missing":
             risks.append(
                 RiskItem(
@@ -88,6 +108,32 @@ def _risk_items(state: PWPSState) -> list[RiskItem]:
                     evidence_ids=list(field.evidence_ids),
                 )
             )
+        if field.status in {"candidate", "suggested", "need_confirmation"}:
+            strength = evidence_strength(linked_evidence)
+            if strength == "weak":
+                risks.append(
+                    RiskItem(
+                        field_id=field.field_id,
+                        risk_type="weak_evidence",
+                        severity="medium",
+                        message=f"{field.label} is supported only by weak or missing evidence.",
+                        evidence_ids=list(field.evidence_ids),
+                    )
+                )
+            if not may_promote_candidate(
+                linked_evidence,
+                requires_human_confirmation=field.field_id in KEY_CHOICE_FIELDS
+                or state.interaction_mode == "guided_confirmation",
+            ):
+                risks.append(
+                    RiskItem(
+                        field_id=field.field_id,
+                        risk_type="confirmation_required",
+                        severity="high" if field.field_id in KEY_CHOICE_FIELDS else "medium",
+                        message=f"{field.label} must remain draft-only until confirmed.",
+                        evidence_ids=list(field.evidence_ids),
+                    )
+                )
     return _dedupe_risks(risks)
 
 

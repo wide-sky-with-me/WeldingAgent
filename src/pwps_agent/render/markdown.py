@@ -117,6 +117,8 @@ def _render_structured_section(index: int, section: str, payload: object) -> lis
         if not isinstance(item, dict):
             continue
         note_parts = [f"confidence={item.get('confidence', 'unknown')}"]
+        if item.get("publishability"):
+            note_parts.append(f"publishability={item.get('publishability')}")
         evidence_ids = item.get("evidence_ids") or []
         if evidence_ids:
             note_parts.append(f"evidence={','.join(evidence_ids)}")
@@ -143,7 +145,14 @@ def _render_state_section(index: int, section: str, state: PWPSState) -> list[st
         field = state.fields[field_id]
         value = "待确认" if field.value in (None, "") else str(field.value)
         note = field.note or ""
-        lines.append(f"| {field.label} | {value} | `{field.status}` | {note} |")
+        note_parts = []
+        if field.publishability:
+            note_parts.append(f"publishability={field.publishability}")
+        if note:
+            note_parts.append(note)
+        lines.append(
+            f"| {field.label} | {value} | `{field.status}` | {'; '.join(note_parts)} |"
+        )
     lines.append("")
     return lines
 

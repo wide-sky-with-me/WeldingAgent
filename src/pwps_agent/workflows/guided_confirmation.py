@@ -25,11 +25,18 @@ class GuidedConfirmationResumeResult(BaseModel):
 class GuidedConfirmationResumePlanner:
     def plan_next_action(self, state: PWPSState) -> AgentAction:
         completed_nodes = {entry.get("node") for entry in state.trace}
+        last = _last_node_indexes(state)
         if _has_pending_confirmation_fields(state):
             return AgentAction(
                 action_type="ASK_USER",
                 rationale_summary="Additional candidate fields still need user confirmation.",
                 expected_state_change="Pause with the next grouped confirmation view.",
+            )
+        if last.get("draft_verifier", -1) < last.get("guided_confirmation_resume", -1):
+            return AgentAction(
+                action_type="VERIFY_DRAFT",
+                rationale_summary="Re-verify draft quality after guided confirmation changes.",
+                expected_state_change="Refresh quality report against current confirmed fields.",
             )
         if "compose_draft" not in completed_nodes:
             return AgentAction(
@@ -93,6 +100,9 @@ def resume_guided_confirmation(
 
     updated = apply_guided_confirmation_payload(state, payload)
     updated.status = "running"
+    updated.quality_report = None
+    updated.field_report = {}
+    updated.risks = []
     updated.trace.append(
         {
             "step": len(updated.trace) + 1,
@@ -153,3 +163,12 @@ def _has_pending_confirmation_fields(state: PWPSState) -> bool:
         )
         for field in state.fields.values()
     )
+
+
+def _last_node_indexes(state: PWPSState) -> dict[str, int]:
+    indexes: dict[str, int] = {}
+    for index, entry in enumerate(state.trace):
+        node = entry.get("node")
+        if isinstance(node, str):
+            indexes[node] = index
+    return indexes

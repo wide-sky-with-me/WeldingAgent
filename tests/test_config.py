@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from pwps_agent.config import load_settings
+from pwps_agent.workflows.auto_draft import DisabledSearchProvider, _build_dependencies
 
 
 EXPECTED_ENV_TEMPLATE_KEYS = {
@@ -86,6 +87,31 @@ def test_loads_configured_knowledge_source_order(tmp_path: Path) -> None:
     assert settings.knowledge.local_doc_enabled is False
     assert settings.knowledge.web_enabled is True
     assert settings.knowledge.model_fallback_enabled is True
+
+
+def test_build_dependencies_does_not_require_web_provider_when_web_disabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "LLM_API_KEY=stub",
+                "LLM_BASE_URL=http://127.0.0.1:18080/v1",
+                "LLM_MODEL=stub",
+                "KNOWLEDGE_SOURCES=model",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    settings = load_settings(env_file)
+
+    deps = _build_dependencies(settings)
+
+    assert isinstance(deps.search_provider, DisabledSearchProvider)
+    assert deps.local_doc_provider is None
 
 
 def test_loads_configured_default_interaction_mode(tmp_path: Path) -> None:

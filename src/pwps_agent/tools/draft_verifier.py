@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 
 from pwps_agent.core.contracts import Evidence, ToolResult
+from pwps_agent.core.evidence_policy import evidence_strength
 from pwps_agent.core.fields import FieldState
 from pwps_agent.core.quality import (
     DraftQualityReport,
@@ -204,19 +205,10 @@ def _weak_evidence_fields(
         linked_evidence = [
             evidence_by_id.get(evidence_id) for evidence_id in field.evidence_ids
         ]
-        if all(_is_weak_evidence(item) for item in linked_evidence):
+        present_evidence = [item for item in linked_evidence if item is not None]
+        if evidence_strength(present_evidence) == "weak":
             weak_fields.append(field.field_id)
     return weak_fields
-
-
-def _is_weak_evidence(evidence: Evidence | None) -> bool:
-    if evidence is None:
-        return True
-    return (
-        evidence.source_tier in {"webpage", "unknown"}
-        or evidence.reliability in {"low", "unknown"}
-        or evidence.confidence in {"low", "unknown"}
-    )
 
 
 def _low_quality_sources(state: PWPSState) -> list[str]:

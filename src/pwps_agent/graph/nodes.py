@@ -281,6 +281,28 @@ def call_tool_node(graph_state: GraphState) -> dict:
         _finalize_runtime_node(state, context, "field_reasoning")
         return {"pwps_state": state}
 
+    if action.tool_name == "guided_options":
+        result = _execute_tool_action(
+            state,
+            context.max_tool_retries,
+            "guided_options",
+            lambda: deps.guided_options_tool(state, deps.llm_client),
+        )
+        if not result:
+            _finalize_runtime_node(state, context, "guided_options")
+            return {"pwps_state": state}
+        state.status = "running"
+        state = _merge_state_patch(state, result.state_patch)
+        _append_trace(
+            state,
+            "guided_options",
+            "tool_result",
+            result.summary,
+            _tool_payload(state, "guided_options", result.success, context.max_tool_retries),
+        )
+        _finalize_runtime_node(state, context, "guided_options")
+        return {"pwps_state": state}
+
     state.status = "failed"
     _append_trace(
         state,
@@ -379,6 +401,13 @@ def ask_user_node(graph_state: GraphState) -> dict:
         "user_input_required",
         "Paused for guided field confirmation.",
         {"confirmation_view": confirmation_view},
+    )
+    state.field_report = state.field_report or render_field_report(state)
+    persist_run_artifacts(
+        state,
+        state.draft_markdown,
+        state.field_report,
+        context.settings.paths.output_dir,
     )
     _finalize_runtime_node(state, context, "ask_user")
     return {"pwps_state": state}

@@ -90,7 +90,9 @@ As of 2026-05-25:
 
 **Interaction Modes**
 - auto_draft (autonomous with candidates/suggestions/missing) ✅
+- auto_draft initial information gate asks only before workflow execution when minimum core fields are missing ✅
 - guided_confirmation (pause/confirm/evidence/history) ✅
+- guided_confirmation option recommendation keeps key choices in need-confirmation until explicit user confirmation ✅
 - supplement_update (patch state, re-evaluate) ✅
 
 **Persistence & Artifacts**
@@ -99,6 +101,8 @@ As of 2026-05-25:
 - field_report.json (fields + evidence + risks) ✅
 - trace.json (complete action history) ✅
 - evidence_index.json (evidence ↔ field mappings) ✅
+- quality_report.json (draft quality verification) ✅
+- agent_metrics.json (field status, override, confirmation, weak-evidence metrics) ✅
 
 **Domain Skills & Guidance**
 - pwps_auto_draft.md (autonomous draft guidance) ✅
@@ -111,13 +115,19 @@ As of 2026-05-25:
 - The LLM Supervisor remains the main actor.
 - `auto_draft` should only ask at the beginning when minimum core fields are missing.
 - `guided_confirmation` should recommend options and require human confirmation for key choices.
-- Upcoming work: initial information gates, publishability/state separation, evidence policy, guided options, Supervisor policy extraction, and agent eval metrics.
+- Implemented hardening: initial information gates, publishability/state separation, evidence policy, guided options, Supervisor policy extraction, and agent eval metrics.
 
 **Recent Verification**
 
 ```bash
 uv run pytest -q
-142 passed
+159 passed
+
+uv run pytest tests/test_interaction_gates.py tests/test_publishability.py tests/test_evidence_policy.py tests/test_guided_options.py tests/test_eval_metrics.py -q
+11 passed
+
+uv run pytest tests/test_graph_auto_draft.py tests/test_graph_guided_confirmation.py tests/test_graph_supervisor_planner.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py -q
+43 passed
 
 uv run pytest tests/test_graph_auto_draft.py tests/test_evidence_reasoning.py tests/test_cli.py -q
 33 passed
@@ -127,6 +137,17 @@ passed
 
 git diff --check
 passed with no output
+
+LLM_API_KEY=stub LLM_BASE_URL=http://127.0.0.1:18080/v1 LLM_MODEL=stub KNOWLEDGE_SOURCES=model uv run pwps-agent auto-draft ... --output-dir /tmp/pwps-agent-e2e-hardening --run-id auto_dual_mode_hardening
+/tmp/pwps-agent-e2e-hardening/auto_dual_mode_hardening ✅
+pwps.json: status=done; draft includes ER50-6, 80% Ar / 20% CO2, DCEP, 180-260 A, 22-28 V, 180-350 mm/min, heat input, preheat, interpass, and PWHT draft values
+
+LLM_API_KEY=stub LLM_BASE_URL=http://127.0.0.1:18080/v1 LLM_MODEL=stub KNOWLEDGE_SOURCES=model uv run pwps-agent guided-draft ... --run-id guided_dual_mode_hardening3
+status=need_user_input; guided_options generated recommendations for key fields
+
+uv run pwps-agent guided-confirm-resume /tmp/pwps-agent-e2e-hardening/guided_dual_mode_hardening3/pwps.json ...
+/tmp/pwps-agent-e2e-hardening/guided_dual_mode_hardening3 ✅
+pwps.json: status=done; user_confirmed=12; remaining candidate/suggested/need_confirmation/conflict=0; quality report refreshed after confirmation
 
 uv run pwps-agent auto-draft "Q355B 12mm GMAW" --output-dir /tmp/smoke --run-id verify1
 /tmp/smoke/verify1 ✅

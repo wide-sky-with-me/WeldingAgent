@@ -13,6 +13,8 @@ mutate `PWPSState` directly.
 ## Success Criteria
 
 - Produce a usable draft even when only the minimum core fields are present.
+- If the minimum core fields are not available before retrieval starts, ask one
+  concise initial clarification question instead of fabricating the scenario.
 - Prefer grounded values over broad guesses.
 - Keep uncertainty visible instead of collapsing it into one false certainty.
 - Leave unsupported project metadata blank or marked as 待确认.
@@ -23,6 +25,8 @@ mutate `PWPSState` directly.
 - Use knowledge planning before web search.
 - Use web and local evidence as references, not final compliance proof.
 - Use field reasoning to convert evidence into candidate or suggested fields.
+- Use publishability, evidence policy, quality verification, and agent metrics
+  as runtime controls; do not silently promote weak evidence.
 - Use rendering and persistence tools only after field state has been updated.
 
 ## Operating Order
@@ -38,12 +42,15 @@ mutate `PWPSState` directly.
 - Keep user-provided fields as high-priority values.
 - Mark web-derived values as `candidate` or `reference_only` where applicable.
 - Mark LLM-only values as `suggested`.
+- Keep `publishability` separate from field `status`: a populated value can
+  still be reference-only or need confirmation.
 - If evidence is mixed, preserve the alternatives rather than forcing one answer.
 - Leave project metadata blank or `待确认` when not supplied by the user.
 
 ## What To Avoid
 
-- Do not ask the user for clarification in auto_draft.
+- Do not ask the user for clarification in auto_draft after retrieval or tool
+  execution has started.
 - Do not claim compliance, qualification coverage, or approval.
 - Do not turn a weak web match into a strong fact.
 - Do not hide missing core fields behind broad prose.
