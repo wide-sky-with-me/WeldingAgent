@@ -1,5 +1,5 @@
 from pwps_agent.core.contracts import Evidence
-from pwps_agent.core.state import create_initial_state
+from pwps_agent.core.state import PWPSState, create_initial_state
 from pwps_agent.core.state_merge import merge_state_patch
 
 
@@ -93,3 +93,25 @@ def test_merge_records_warnings_for_unknown_patch_keys_and_fields():
     ]
     assert warnings[0]["payload"]["key"] == "unsupported"
     assert warnings[1]["payload"]["field_id"] == "unknown_field"
+
+
+def test_merge_normalizes_llm_confirmed_status_to_schema_valid_filled():
+    state = create_initial_state("Q355B 12mm GMAW", "auto_draft")
+
+    updated = merge_state_patch(
+        state,
+        {
+            "fields": {
+                "base_material": {
+                    "value": "Q355B",
+                    "status": "confirmed",
+                    "confidence": "high",
+                    "source": {"type": "user_input"},
+                    "evidence_ids": ["ev_user_input_1"],
+                }
+            }
+        },
+    )
+
+    assert updated.fields["base_material"].status == "filled"
+    PWPSState.model_validate_json(updated.model_dump_json())

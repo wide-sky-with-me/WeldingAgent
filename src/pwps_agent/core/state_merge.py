@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from pwps_agent.core.contracts import Evidence
+from pwps_agent.core.fields import FieldState
 from pwps_agent.core.state import PWPSState
 
 
@@ -63,6 +64,7 @@ def _merge_fields(state: PWPSState, fields_patch: dict[str, dict[str, Any]]) -> 
                 {"field_id": field_id},
             )
             continue
+        field_patch = _normalize_field_patch(state, field_id, field_patch)
         field = state.fields[field_id]
         incoming_value = field_patch.get("value")
         if (
@@ -78,6 +80,26 @@ def _merge_fields(state: PWPSState, fields_patch: dict[str, dict[str, Any]]) -> 
         if field.source is None:
             field.source = {}
         field.source.setdefault("updated_at", _now_iso())
+
+
+def _normalize_field_patch(
+    state: PWPSState,
+    field_id: str,
+    field_patch: dict[str, Any],
+) -> dict[str, Any]:
+    normalized = dict(field_patch)
+    status = normalized.get("status")
+    if status == "confirmed":
+        normalized["status"] = "filled"
+        return normalized
+    if status is not None and status not in FieldState.model_fields["status"].annotation.__args__:
+        _append_merge_warning(
+            state,
+            "Normalized invalid field status to candidate.",
+            {"field_id": field_id, "status": status},
+        )
+        normalized["status"] = "candidate"
+    return normalized
 
 
 def _candidate_from_patch(field_patch: dict[str, Any]) -> dict[str, Any]:
