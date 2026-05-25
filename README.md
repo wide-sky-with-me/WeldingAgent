@@ -1,5 +1,7 @@
 # pWPS Agent
 
+中文版本: [README.zh-CN.md](README.zh-CN.md)
+
 LLM-centric pWPS draft generation agent core.
 
 This repository implements a first-stage assistant for generating **draft** preliminary Welding Procedure Specifications (pWPS). It uses a single LLM Supervisor, Domain Skills, runtime tools, `PWPSState`, LangGraph orchestration, local document retrieval, web search, and structured output contracts.
