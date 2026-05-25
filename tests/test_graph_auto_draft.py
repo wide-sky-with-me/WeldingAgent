@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pwps_agent.config import Settings
 from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
-from pwps_agent.core.state import create_initial_state
+from pwps_agent.core.state import PWPSState, create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.state import GraphRuntimeContext
 from pwps_agent.knowledge.local_doc_provider import LocalDocumentProvider
@@ -52,6 +52,27 @@ class StaticPlanningTool:
         )
 
 
+class MixedSourcePlanningTool:
+    def __call__(self, state, client):
+        return ToolResult(
+            tool_name="knowledge_planning",
+            success=True,
+            state_patch={
+                "knowledge_queries": [
+                    {
+                        "query_id": "kq_mixed_001",
+                        "purpose": "similar_case",
+                        "query_text": "Q355B 12mm GMAW WPS shielding gas",
+                        "target_fields": ["shielding_gas"],
+                        "rationale": "Find local first, then web.",
+                        "preferred_sources": ["local_doc", "web"],
+                    }
+                ]
+            },
+            summary="planned mixed query",
+        )
+
+
 class StaticSearchProvider:
     def search(self, query: str, query_id: str):
         return [
@@ -64,6 +85,50 @@ class StaticSearchProvider:
                 snippet="Ar+CO2 shielding gas appears in a comparable GMAW WPS.",
             )
         ]
+
+
+class EmptySearchProvider:
+    def search(self, query: str, query_id: str):
+        return []
+
+
+class StaticModelFallbackReasoningTool:
+    def __call__(self, state, evidence, client):
+        return ToolResult(
+            tool_name="field_reasoning",
+            success=True,
+            state_patch={
+                "fields": {
+                    "shielding_gas": {
+                        "value": "80% Ar / 20% CO2",
+                        "status": "candidate",
+                        "confidence": "low",
+                        "evidence_ids": [],
+                        "source": {"type": "web", "evidence_ids": []},
+                    }
+                }
+            },
+            summary="reasoned model fallback field",
+        )
+
+
+class StatusWordReasoningTool:
+    def __call__(self, state, evidence, client):
+        return ToolResult(
+            tool_name="field_reasoning",
+            success=True,
+            state_patch={
+                "fields": {
+                    "shielding_gas": {
+                        "value": "need_confirmation",
+                        "status": "need_confirmation",
+                        "confidence": "low",
+                        "evidence_ids": ["ev_r1"],
+                    }
+                }
+            },
+            summary="reasoned placeholder status word",
+        )
 
 
 class StaticReasoningTool:
@@ -168,6 +233,10 @@ def test_auto_draft_graph_executes_tool_sequence_and_persists_artifacts(tmp_path
     assert (run_dir / "pwps_draft.md").exists()
     assert (run_dir / "field_report.json").exists()
     assert (run_dir / "trace.json").exists()
+    persisted_state = PWPSState.model_validate_json(
+        (run_dir / "pwps.json").read_text(encoding="utf-8")
+    )
+    assert persisted_state.status == "done"
     assert [
         entry["node"]
         for entry in final_state.trace
@@ -308,3 +377,115 @@ def test_graph_auto_draft_collects_local_doc_evidence_and_persists_index(tmp_pat
     assert any(entry["node"] == "local_doc_search" for entry in final_state.trace)
     evidence_index = json.loads((run_dir / "evidence_index.json").read_text(encoding="utf-8"))
     assert any(item["source_type"] == "local_doc" for item in evidence_index["evidence"])
+
+
+def test_graph_runs_web_for_mixed_source_queries(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        local_doc_provider=LocalDocumentProvider(Path("tests/fixtures/local_docs")),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=MixedSourcePlanningTool(),
+        field_reasoning_tool=StaticReasoningTool(),
+    )
+    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="graph_mixed_source_test",
+    )
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    final_state = result["pwps_state"]
+    assert final_state.status == "done"
+    assert any(entry["node"] == "local_doc_search" for entry in final_state.trace)
+    assert any(entry["node"] == "web_search" for entry in final_state.trace)
+    assert any(item.source_type == "web" for item in final_state.evidence)
+
+
+def test_graph_skips_local_doc_when_knowledge_sources_disable_it(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    settings.knowledge.sources = ["web", "model"]
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=MixedSourcePlanningTool(),
+        field_reasoning_tool=StaticReasoningTool(),
+    )
+    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="graph_web_only_test",
+    )
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    final_state = result["pwps_state"]
+    assert final_state.status == "done"
+    assert not any(entry["node"] == "local_doc_search" for entry in final_state.trace)
+    assert any(entry["node"] == "web_search" for entry in final_state.trace)
+
+
+def test_graph_marks_model_fallback_fields_as_suggested_without_external_evidence(
+    tmp_path: Path,
+):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    settings.knowledge.sources = ["web", "model"]
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=EmptySearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=StaticModelFallbackReasoningTool(),
+    )
+    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="graph_model_fallback_test",
+    )
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    final_state = result["pwps_state"]
+    field = final_state.fields["shielding_gas"]
+    assert final_state.status == "done"
+    assert field.status == "suggested"
+    assert field.source["type"] == "llm"
+    assert field.source["evidence_ids"] == []
+    assert field.confirmation == {"required": True, "confirmed": False}
+    assert any(
+        entry["node"] == "web_search" and entry["event_type"] == "tool_result"
+        for entry in final_state.trace
+    )
+
+
+def test_graph_does_not_write_status_words_as_field_values(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=StatusWordReasoningTool(),
+    )
+    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="graph_status_word_test",
+    )
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    field = result["pwps_state"].fields["shielding_gas"]
+    assert field.value is None
+    assert field.status == "missing"

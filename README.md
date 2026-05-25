@@ -95,13 +95,14 @@ BRAVE_SEARCH_API_KEY=...
 Runtime paths:
 
 ```text
+KNOWLEDGE_SOURCES=local_doc,web
 PWPS_LOCAL_DOCS_DIR=data/local_docs
 PWPS_OUTPUT_DIR=data/outputs
 LOCAL_DOC_MAX_RESULTS=5
 LOCAL_DOC_SNIPPET_CHARS=420
 ```
 
-Local documents can be `.md`, `.markdown`, or `.txt` files.
+Local documents can be `.md`, `.markdown`, or `.txt` files. If no local knowledge base is available yet, use `KNOWLEDGE_SOURCES=web,model` to skip local retrieval and allow model fallback after web evidence is unavailable.
 
 ## Quick Start
 

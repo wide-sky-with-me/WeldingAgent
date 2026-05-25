@@ -141,6 +141,21 @@ class PlannerRepeatingCompletedRequirementTool:
         )
 
 
+class PlannerAskingUserAfterCompose:
+    def plan_next_action(self, state):
+        if "compose_draft" in {entry.get("node") for entry in state.trace}:
+            return AgentAction(
+                action_type="ASK_USER",
+                rationale_summary="Ask user even though auto-draft artifacts already exist.",
+                expected_state_change="This should finish instead of pausing auto-draft.",
+            )
+        return AgentAction(
+            action_type="COMPOSE_DRAFT",
+            rationale_summary="Compose draft first.",
+            expected_state_change="Persist draft artifacts.",
+        )
+
+
 class CapturingStructuredClient:
     def __init__(self):
         self.calls = []
@@ -317,6 +332,34 @@ def test_graph_overrides_repeated_completed_llm_tool_action(tmp_path: Path):
         entry["node"] == "supervisor"
         and entry["event_type"] == "agent_action_overridden"
         and entry["payload"]["requested_tool_name"] == "requirement_understanding"
+        for entry in final_state.trace
+    )
+
+
+def test_graph_finishes_auto_draft_when_planner_asks_user_after_compose(tmp_path: Path):
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="ask_after_compose",
+    )
+    graph = build_auto_draft_graph()
+
+    result = graph.invoke(
+        {
+            "pwps_state": state,
+            "context": _context(tmp_path, planner=PlannerAskingUserAfterCompose()),
+        }
+    )
+
+    final_state = result["pwps_state"]
+    assert final_state.status == "done"
+    assert any(entry["node"] == "compose_draft" for entry in final_state.trace)
+    assert not any(entry["node"] == "ask_user" for entry in final_state.trace)
+    assert any(
+        entry["node"] == "supervisor"
+        and entry["event_type"] == "agent_action_overridden"
+        and entry["payload"]["requested_action_type"] == "ASK_USER"
+        and entry["payload"]["replacement_action_type"] == "FINISH"
         for entry in final_state.trace
     )
 

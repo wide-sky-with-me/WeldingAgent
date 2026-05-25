@@ -14,6 +14,7 @@ EXPECTED_ENV_TEMPLATE_KEYS = {
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "OPENAI_MODEL",
+    "KNOWLEDGE_SOURCES",
     "SUPERVISOR_PLANNER",
     "WEB_SEARCH_PROVIDER",
     "WEB_SEARCH_MAX_RESULTS",
@@ -75,6 +76,18 @@ def test_supervisor_planner_defaults_to_deterministic(tmp_path: Path) -> None:
     settings = load_settings(env_file)
 
     assert settings.supervisor.planner == "deterministic"
+
+
+def test_loads_configured_knowledge_source_order(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("KNOWLEDGE_SOURCES=web,model\n", encoding="utf-8")
+
+    settings = load_settings(env_file)
+
+    assert settings.knowledge.sources == ["web", "model"]
+    assert settings.knowledge.local_doc_enabled is False
+    assert settings.knowledge.web_enabled is True
+    assert settings.knowledge.model_fallback_enabled is True
 
 
 def test_openai_aliases_do_not_override_provider_neutral_settings(tmp_path: Path) -> None:

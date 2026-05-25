@@ -154,6 +154,17 @@ def call_tool_node(graph_state: GraphState) -> dict:
         return {"pwps_state": state}
 
     if action.tool_name == "local_doc_search":
+        if not context.settings.knowledge.local_doc_enabled:
+            state.status = "running"
+            _append_trace(
+                state,
+                "local_doc_search",
+                "tool_skipped",
+                "Local document search is disabled by knowledge source configuration.",
+                {"sources": context.settings.knowledge.sources},
+            )
+            _finalize_runtime_node(state, context, "local_doc_search")
+            return {"pwps_state": state}
         if deps.local_doc_provider is None:
             state.status = "failed"
             _append_trace(
@@ -179,17 +190,39 @@ def call_tool_node(graph_state: GraphState) -> dict:
         return {"pwps_state": state}
 
     if action.tool_name == "web_search":
+        if not context.settings.knowledge.web_enabled:
+            state.status = "running"
+            _append_trace(
+                state,
+                "web_search",
+                "tool_skipped",
+                "Web search is disabled by knowledge source configuration.",
+                {"sources": context.settings.knowledge.sources},
+            )
+            _finalize_runtime_node(state, context, "web_search")
+            return {"pwps_state": state}
         search_results = _run_search_queries(state, context, deps.search_provider)
         web_queries = _web_queries(state.knowledge_queries)
         if not search_results and web_queries:
             payload = _tool_payload(state, "web_search", False, context.max_tool_retries)
-            state.status = "failed"
+            if not context.settings.knowledge.model_fallback_enabled:
+                state.status = "failed"
+                _append_trace(
+                    state,
+                    "web_search",
+                    "tool_result",
+                    "No web search results were retrieved.",
+                    payload,
+                )
+                _finalize_runtime_node(state, context, "web_search")
+                return {"pwps_state": state}
+            state.status = "running"
             _append_trace(
                 state,
                 "web_search",
                 "tool_result",
-                "No web search results were retrieved.",
-                payload,
+                "No web search results were retrieved; model fallback remains enabled.",
+                {**payload, "model_fallback_enabled": True},
             )
             _finalize_runtime_node(state, context, "web_search")
             return {"pwps_state": state}
@@ -208,6 +241,10 @@ def call_tool_node(graph_state: GraphState) -> dict:
         return {"pwps_state": state}
 
     if action.tool_name == "field_reasoning":
+        use_model_fallback = (
+            context.settings.knowledge.model_fallback_enabled
+            and not _has_external_evidence(state)
+        )
         result = _execute_tool_action(
             state,
             context.max_tool_retries,
@@ -219,8 +256,19 @@ def call_tool_node(graph_state: GraphState) -> dict:
             return {"pwps_state": state}
         state.status = "running"
         if result.success and result.state_patch.get("fields"):
+            result.state_patch["fields"] = _drop_status_word_field_values(
+                result.state_patch["fields"]
+            )
+            if use_model_fallback:
+                result.state_patch["fields"] = _mark_model_fallback_fields(
+                    result.state_patch["fields"]
+                )
             state = _merge_state_patch(state, result.state_patch)
-            summary = result.summary
+            summary = (
+                "Generated suggested fields from model fallback."
+                if use_model_fallback
+                else result.summary
+            )
         else:
             candidates = infer_candidates_from_evidence(state.evidence)
             state = apply_field_candidates(state, candidates)
@@ -331,6 +379,13 @@ def finish_node(graph_state: GraphState) -> dict:
         f"Auto-draft graph finished with status {state.status}.",
         {"status": state.status},
     )
+    if state.draft_markdown and state.field_report:
+        persist_run_artifacts(
+            state,
+            state.draft_markdown,
+            state.field_report,
+            context.settings.paths.output_dir,
+        )
     _finalize_runtime_node(state, context, "finish")
     return {"pwps_state": state}
 
@@ -445,8 +500,45 @@ def _web_queries(knowledge_queries: list[dict]) -> list[dict]:
     return [
         query
         for query in knowledge_queries
-        if "local_doc" not in (query.get("preferred_sources") or [])
+        if "web" in (query.get("preferred_sources") or ["web"])
     ]
+
+
+def _has_external_evidence(state) -> bool:
+    return any(item.source_type in {"local_doc", "web"} for item in state.evidence)
+
+
+def _mark_model_fallback_fields(fields: dict) -> dict:
+    marked = {}
+    for field_id, field_patch in fields.items():
+        patch = dict(field_patch)
+        note = patch.get("note")
+        fallback_note = "Suggested by model fallback because no external evidence was retrieved."
+        patch["status"] = "suggested"
+        patch["confidence"] = patch.get("confidence") or "low"
+        patch["evidence_ids"] = []
+        patch["source"] = {"type": "llm", "evidence_ids": []}
+        patch["confirmation"] = {"required": True, "confirmed": False}
+        patch["note"] = f"{note} {fallback_note}" if note else fallback_note
+        marked[field_id] = patch
+    return marked
+
+
+def _drop_status_word_field_values(fields: dict) -> dict:
+    cleaned = {}
+    for field_id, field_patch in fields.items():
+        value = field_patch.get("value")
+        if isinstance(value, str) and value.strip().lower() in {
+            "candidate",
+            "suggested",
+            "need_confirmation",
+            "missing",
+            "unknown",
+            "待确认",
+        }:
+            continue
+        cleaned[field_id] = field_patch
+    return cleaned
 
 
 def _tool_payload(state, node: str, success: bool, max_retries: int) -> dict:

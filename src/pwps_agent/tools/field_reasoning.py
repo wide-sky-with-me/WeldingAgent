@@ -131,6 +131,15 @@ def reason_fields_from_evidence(
         value = candidate.get("value")
         if value in (None, ""):
             continue
+        if isinstance(value, str) and value.strip().lower() in {
+            "candidate",
+            "suggested",
+            "need_confirmation",
+            "missing",
+            "unknown",
+            "待确认",
+        }:
+            continue
         fields[field_id] = {
             "value": value,
             "status": candidate.get("status", "candidate"),

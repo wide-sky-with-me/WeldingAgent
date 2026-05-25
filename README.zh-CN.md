@@ -93,13 +93,14 @@ BRAVE_SEARCH_API_KEY=...
 运行路径配置：
 
 ```text
+KNOWLEDGE_SOURCES=local_doc,web
 PWPS_LOCAL_DOCS_DIR=data/local_docs
 PWPS_OUTPUT_DIR=data/outputs
 LOCAL_DOC_MAX_RESULTS=5
 LOCAL_DOC_SNIPPET_CHARS=420
 ```
 
-本地文档可以放在 `data/local_docs`，当前支持 `.md`、`.markdown`、`.txt`。
+本地文档可以放在 `data/local_docs`，当前支持 `.md`、`.markdown`、`.txt`。如果暂时没有本地知识库，可以设置 `KNOWLEDGE_SOURCES=web,model`，这样会跳过本地检索，并在网络证据不可用时允许模型知识兜底。
 
 ## 快速运行
 

@@ -338,7 +338,7 @@ passed with no output
 
 ## Phase 6: Add Local Document Retrieval Provider
 
-> **Status:** Completed. Local document retrieval now scans configured markdown/text documents, ranks matching snippets, emits `local_doc` search results and evidence, and participates in the graph auto-draft evidence flow alongside web search.
+> **Status:** Completed. Local document retrieval now scans configured markdown/text documents, ranks matching snippets, emits `local_doc` search results and evidence, and participates in the graph auto-draft evidence flow alongside web search. Knowledge source execution is configurable through `KNOWLEDGE_SOURCES`, so runs can disable local retrieval, continue web search for mixed-source planned queries, and use model fallback only as `suggested` confirmation-required output.
 
 **Goal:** Implement local document retrieval as a real knowledge source alongside web search.
 
@@ -364,6 +364,8 @@ passed with no output
 - [x] Implement keyword/BM25-style retrieval without adding a database dependency.
 - [x] Convert local snippets into evidence with `source_type="local_doc"`.
 - [x] Let knowledge planning target `local_doc`, `web`, or both.
+- [x] Let runtime configuration decide enabled source order through `KNOWLEDGE_SOURCES`, rather than letting planner preferences disable configured sources.
+- [x] Treat model fallback as lower-priority fallback that can only produce `suggested` fields requiring confirmation.
 - [x] Add graph tool routing for `local_doc_search`.
 - [x] Add tests proving local evidence links to fields and appears in `evidence_index.json`.
 
@@ -379,6 +381,24 @@ git diff --check
 Verification:
 
 ```text
+uv run pytest tests/test_config.py tests/test_graph_auto_draft.py tests/test_graph_supervisor_planner.py -q
+22 passed
+
+uv run pytest -q
+106 passed
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
+KNOWLEDGE_SOURCES=web,model uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-knowledge-source-smoke --run-id web_model_demo_final3
+/tmp/pwps-agent-knowledge-source-smoke/web_model_demo_final3
+persisted pwps.json status: done
+local_doc_search events: 0
+web_search_query events: 3
+
 uv run pytest tests/test_local_doc_provider.py tests/test_local_doc_search.py tests/test_graph_auto_draft.py -q
 10 passed, 1 warning
 

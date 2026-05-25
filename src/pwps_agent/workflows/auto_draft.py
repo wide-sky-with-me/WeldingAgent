@@ -226,5 +226,5 @@ def _web_queries(knowledge_queries: list[dict]) -> list[dict]:
     return [
         query
         for query in knowledge_queries
-        if "local_doc" not in (query.get("preferred_sources") or [])
+        if "web" in (query.get("preferred_sources") or ["web"])
     ]

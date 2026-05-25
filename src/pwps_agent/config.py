@@ -44,6 +44,24 @@ class LocalDocSettings(BaseModel):
     snippet_chars: int = 420
 
 
+class KnowledgeSettings(BaseModel):
+    sources: list[Literal["local_doc", "web", "model"]] = Field(
+        default_factory=lambda: ["local_doc", "web"],
+    )
+
+    @property
+    def local_doc_enabled(self) -> bool:
+        return "local_doc" in self.sources
+
+    @property
+    def web_enabled(self) -> bool:
+        return "web" in self.sources
+
+    @property
+    def model_fallback_enabled(self) -> bool:
+        return "model" in self.sources
+
+
 class PathSettings(BaseModel):
     local_docs_dir: Path = Path("data/local_docs")
     output_dir: Path = Path("data/outputs")
@@ -55,6 +73,7 @@ class Settings(BaseModel):
     supervisor: SupervisorSettings = Field(default_factory=SupervisorSettings)
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
     local_docs: LocalDocSettings = Field(default_factory=LocalDocSettings)
+    knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
     paths: PathSettings = Field(default_factory=PathSettings)
 
 
@@ -96,6 +115,9 @@ def load_settings(env_file: str | Path = ".env") -> Settings:
         local_docs=LocalDocSettings(
             max_results=_int(values.get("LOCAL_DOC_MAX_RESULTS"), 5),
             snippet_chars=_int(values.get("LOCAL_DOC_SNIPPET_CHARS"), 420),
+        ),
+        knowledge=KnowledgeSettings(
+            sources=_knowledge_sources(values.get("KNOWLEDGE_SOURCES")),
         ),
         paths=PathSettings(
             local_docs_dir=Path(values.get("PWPS_LOCAL_DOCS_DIR", "data/local_docs")),
@@ -141,3 +163,21 @@ def _bool(value: str | None, default: bool) -> bool:
     if value in (None, ""):
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _knowledge_sources(value: str | None) -> list[str]:
+    if value in (None, ""):
+        return ["local_doc", "web"]
+    allowed = {"local_doc", "web", "model"}
+    sources: list[str] = []
+    for raw_source in value.split(","):
+        source = raw_source.strip()
+        if not source:
+            continue
+        if source not in allowed:
+            raise ValueError(f"Unsupported knowledge source: {source}")
+        if source not in sources:
+            sources.append(source)
+    if not sources:
+        raise ValueError("KNOWLEDGE_SOURCES must include at least one source.")
+    return sources

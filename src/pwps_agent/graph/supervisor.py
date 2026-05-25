@@ -34,8 +34,11 @@ class SupervisorPlanner(Protocol):
 
 
 class DeterministicAutoDraftPlanner:
+    def __init__(self, knowledge_sources: list[str] | None = None) -> None:
+        self.knowledge_sources = knowledge_sources
+
     def plan_next_action(self, state: PWPSState) -> AgentAction:
-        return plan_next_auto_draft_action(state)
+        return plan_next_auto_draft_action(state, self.knowledge_sources)
 
 
 class LLMSupervisorPlanner:
@@ -106,7 +109,9 @@ class LLMSupervisorPlanner:
 def supervisor_node(graph_state: GraphState) -> dict:
     state = graph_state["pwps_state"].model_copy(deep=True)
     context = graph_state["context"]
-    planner = context.supervisor_planner or DeterministicAutoDraftPlanner()
+    planner = context.supervisor_planner or DeterministicAutoDraftPlanner(
+        context.settings.knowledge.sources
+    )
     planner_mode = context.supervisor_planner_mode
     if planner_mode is None:
         planner_mode = "injected" if context.supervisor_planner is not None else "deterministic"
@@ -136,7 +141,11 @@ def supervisor_node(graph_state: GraphState) -> dict:
             }
         )
         return {"pwps_state": state}
-    override_action = _override_repeated_completed_action(state, action)
+    override_action = _override_repeated_completed_action(
+        state,
+        action,
+        context.settings.knowledge.sources,
+    )
     if override_action is not None:
         state.trace.append(
             {
@@ -221,23 +230,31 @@ def _validate_action(action: AgentAction) -> str | None:
 def _override_repeated_completed_action(
     state: PWPSState,
     action: AgentAction,
+    knowledge_sources: list[str] | None = None,
 ) -> AgentAction | None:
+    if _node_completed(state, "compose_draft") and action.action_type != "FINISH":
+        return AgentAction(
+            action_type="FINISH",
+            rationale_summary="Draft artifacts are already composed; finish auto-draft run.",
+            expected_state_change="Mark graph run as done.",
+            stop_reason="auto_draft_complete",
+        )
     if action.action_type == "CALL_TOOL" and action.tool_name:
         if _node_completed(state, action.tool_name):
-            return plan_next_auto_draft_action(state)
+            return plan_next_auto_draft_action(state, knowledge_sources)
     if action.action_type == "USE_DOMAIN_SKILL" and action.domain_skill_name:
         if action.domain_skill_name in state.active_domain_skills:
-            return plan_next_auto_draft_action(state)
+            return plan_next_auto_draft_action(state, knowledge_sources)
     if action.action_type == "UPDATE_STATE":
         if action.tool_args.get("operation") == "supplement_update" and _node_completed(
             state,
             "supplement_update",
         ):
-            return plan_next_auto_draft_action(state)
+            return plan_next_auto_draft_action(state, knowledge_sources)
     if action.action_type == "COMPOSE_DRAFT" and _node_completed(state, "compose_draft"):
-        return plan_next_auto_draft_action(state)
+        return plan_next_auto_draft_action(state, knowledge_sources)
     if action.action_type == "GENERATE_REPORT" and _node_completed(state, "risk_report"):
-        return plan_next_auto_draft_action(state)
+        return plan_next_auto_draft_action(state, knowledge_sources)
     return None
 
 
@@ -245,7 +262,11 @@ def _node_completed(state: PWPSState, node: str) -> bool:
     return any(entry.get("node") == node for entry in state.trace)
 
 
-def plan_next_auto_draft_action(state: PWPSState) -> AgentAction:
+def plan_next_auto_draft_action(
+    state: PWPSState,
+    knowledge_sources: list[str] | None = None,
+) -> AgentAction:
+    sources = knowledge_sources or ["local_doc", "web"]
     completed_nodes = {entry.get("node") for entry in state.trace}
     if "requirement_understanding" not in completed_nodes:
         return _tool_action(
@@ -257,12 +278,16 @@ def plan_next_auto_draft_action(state: PWPSState) -> AgentAction:
             "knowledge_planning",
             "Plan targeted evidence queries for missing or risky fields.",
         )
-    if "local_doc_search" not in completed_nodes and _has_local_doc_queries(state):
+    if (
+        "local_doc" in sources
+        and "local_doc_search" not in completed_nodes
+        and _has_local_doc_queries(state)
+    ):
         return _tool_action(
             "local_doc_search",
             "Search local documents for planned evidence references.",
         )
-    if "web_search" not in completed_nodes:
+    if "web" in sources and "web_search" not in completed_nodes and _has_web_queries(state):
         return _tool_action(
             "web_search",
             "Run planned web searches and convert results into evidence.",
@@ -298,5 +323,12 @@ def _tool_action(tool_name: str, rationale: str) -> AgentAction:
 def _has_local_doc_queries(state: PWPSState) -> bool:
     return any(
         "local_doc" in (query.get("preferred_sources") or [])
+        for query in state.knowledge_queries
+    )
+
+
+def _has_web_queries(state: PWPSState) -> bool:
+    return any(
+        "web" in (query.get("preferred_sources") or ["web"])
         for query in state.knowledge_queries
     )
