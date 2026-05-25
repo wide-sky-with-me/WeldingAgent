@@ -10,6 +10,20 @@ from pwps_agent.web.guided_confirmation import (
 )
 
 
+def _fill_minimum_core_fields(state) -> None:
+    for field_id, value in {
+        "applicable_standard": "AWS D1.1",
+        "base_material": "Q355B",
+        "thickness": "12mm",
+        "workpiece_type": "plate",
+        "welding_process": "GMAW",
+        "joint_type": "butt joint",
+        "welding_position": "flat",
+    }.items():
+        state.fields[field_id].value = value
+        state.fields[field_id].status = "filled"
+
+
 def test_web_payload_exposes_confirmation_view() -> None:
     state = create_initial_state("Q355B 12mm plate GMAW", "guided_confirmation")
     state.evidence.append(
@@ -65,6 +79,7 @@ def test_web_html_contains_guided_confirmation_shell() -> None:
 def test_web_resume_payload_persists_artifacts(tmp_path) -> None:
     state = create_initial_state("Q355B 12mm plate GMAW", "guided_confirmation", run_id="web_resume")
     state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
 
@@ -89,6 +104,7 @@ def test_web_resume_run_payload_loads_latest_checkpoint(tmp_path) -> None:
         run_id="web_resume_run",
     )
     state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
     save_checkpoint(state, tmp_path, "ask_user")

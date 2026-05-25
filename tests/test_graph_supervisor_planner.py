@@ -156,6 +156,15 @@ class PlannerAskingUserAfterCompose:
         )
 
 
+class PlannerAskingUserImmediately:
+    def plan_next_action(self, state):
+        return AgentAction(
+            action_type="ASK_USER",
+            rationale_summary="Ask user before gathering evidence.",
+            expected_state_change="This should be guarded in auto-draft.",
+        )
+
+
 class CapturingStructuredClient:
     def __init__(self):
         self.calls = []
@@ -364,6 +373,54 @@ def test_graph_finishes_auto_draft_when_planner_asks_user_after_compose(tmp_path
     )
 
 
+def test_graph_auto_draft_overrides_planner_asking_user_before_compose(tmp_path: Path):
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="ask_before_compose",
+    )
+
+    result = supervisor_node(
+        {
+            "pwps_state": state,
+            "context": _context(tmp_path, planner=PlannerAskingUserImmediately()),
+        }
+    )
+
+    next_state = result["pwps_state"]
+    assert next_state.pending_action is not None
+    assert next_state.pending_action.action_type == "CALL_TOOL"
+    assert next_state.pending_action.tool_name == "requirement_understanding"
+    assert next_state.trace[-2]["event_type"] == "agent_action_overridden"
+    assert next_state.trace[-2]["payload"]["requested_action_type"] == "ASK_USER"
+    assert next_state.trace[-2]["payload"]["replacement_tool_name"] == (
+        "requirement_understanding"
+    )
+
+
+def test_graph_guided_mode_asks_user_after_compose_when_candidates_remain(tmp_path: Path):
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "guided_confirmation",
+        run_id="guided_ask_after_compose",
+    )
+    state.fields["shielding_gas"].value = "CO2"
+    state.fields["shielding_gas"].status = "candidate"
+    graph = build_auto_draft_graph()
+
+    result = graph.invoke(
+        {
+            "pwps_state": state,
+            "context": _context(tmp_path, planner=PlannerAskingUserAfterCompose()),
+        }
+    )
+
+    final_state = result["pwps_state"]
+    assert final_state.status == "need_user_input"
+    assert any(entry["node"] == "compose_draft" for entry in final_state.trace)
+    assert final_state.trace[-1]["node"] == "ask_user"
+
+
 def test_supervisor_node_rejects_unknown_domain_skill(tmp_path: Path):
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
@@ -431,6 +488,28 @@ def test_llm_supervisor_planner_requests_structured_agent_action():
     assert "risks" in client.calls[0]["user_prompt"]
     assert "field_report" in client.calls[0]["user_prompt"]
     assert "Q355B" in client.calls[0]["user_prompt"]
+
+
+def test_llm_supervisor_planner_describes_mode_specific_closure_rules():
+    client = CapturingStructuredClient()
+    planner = LLMSupervisorPlanner(client=client)
+    auto_state = create_initial_state("Q355B 12mm GMAW", "auto_draft", run_id="auto_mode")
+    guided_state = create_initial_state(
+        "Q355B 12mm GMAW",
+        "guided_confirmation",
+        run_id="guided_mode",
+    )
+
+    planner.plan_next_action(auto_state)
+    planner.plan_next_action(guided_state)
+
+    auto_prompt = client.calls[0]["system_prompt"]
+    guided_prompt = client.calls[1]["system_prompt"]
+    assert "do not ask the user" in auto_prompt
+    assert "model fallback" in auto_prompt
+    assert "ask the user" in guided_prompt
+    assert "options" in guided_prompt
+    assert "Domain Skill: pwps_guided_confirmation" in guided_prompt
 
 
 def test_llm_supervisor_planner_uses_active_domain_skill_context():

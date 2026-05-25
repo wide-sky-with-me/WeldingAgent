@@ -9,6 +9,20 @@ from pwps_agent.workflows.guided_confirmation import (
 )
 
 
+def _fill_minimum_core_fields(state) -> None:
+    for field_id, value in {
+        "applicable_standard": "AWS D1.1",
+        "base_material": "Q355B",
+        "thickness": "12mm",
+        "workpiece_type": "plate",
+        "welding_process": "GMAW",
+        "joint_type": "butt joint",
+        "welding_position": "flat",
+    }.items():
+        state.fields[field_id].value = value
+        state.fields[field_id].status = "filled"
+
+
 def test_resume_guided_confirmation_applies_payload_and_persists_artifacts(tmp_path: Path) -> None:
     settings = Settings()
     settings.paths.output_dir = tmp_path
@@ -18,6 +32,7 @@ def test_resume_guided_confirmation_applies_payload_and_persists_artifacts(tmp_p
         run_id="guided_resume",
     )
     state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
 
@@ -53,6 +68,7 @@ def test_resume_guided_confirmation_pauses_again_when_candidates_remain(tmp_path
         run_id="guided_multi_turn",
     )
     state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
     state.fields["shielding_gas"].value = "80% Ar / 20% CO2"
@@ -75,6 +91,49 @@ def test_resume_guided_confirmation_pauses_again_when_candidates_remain(tmp_path
     assert (tmp_path / "guided_multi_turn" / "checkpoints" / "latest.json").exists()
 
 
+def test_resume_guided_confirmation_pauses_again_for_suggested_conflict_or_candidate_options(
+    tmp_path: Path,
+) -> None:
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW",
+        "guided_confirmation",
+        run_id="guided_multi_status",
+    )
+    state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
+    state.fields["filler_material"].value = "ER50-6"
+    state.fields["filler_material"].status = "candidate"
+    state.fields["shielding_gas"].value = "80% Ar / 20% CO2"
+    state.fields["shielding_gas"].status = "suggested"
+    state.fields["preheat_temperature"].value = "not required"
+    state.fields["preheat_temperature"].status = "conflict"
+    state.fields["pwht"].candidates.append(
+        {"value": "not required", "confidence": "low", "evidence_ids": []}
+    )
+
+    result = resume_guided_confirmation(
+        state,
+        {
+            "fields": {"filler_material": "ER50-6"},
+            "message": "Confirm filler.",
+            "action": "accepted",
+        },
+        settings=settings,
+    )
+
+    assert result.state.status == "need_user_input"
+    assert result.state.trace[-1]["node"] == "ask_user"
+    view = result.state.trace[-1]["payload"]["confirmation_view"]
+    field_ids = {
+        field["field_id"]
+        for group in view["groups"]
+        for field in group["fields"]
+    }
+    assert {"shielding_gas", "preheat_temperature", "pwht"} <= field_ids
+
+
 def test_resume_guided_confirmation_from_checkpoint_uses_run_id(tmp_path: Path) -> None:
     settings = Settings()
     settings.paths.output_dir = tmp_path
@@ -84,6 +143,7 @@ def test_resume_guided_confirmation_from_checkpoint_uses_run_id(tmp_path: Path) 
         run_id="guided_checkpoint",
     )
     state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
     save_checkpoint(state, tmp_path, "ask_user")

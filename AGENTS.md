@@ -77,11 +77,11 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 - `requirement_understanding`, `knowledge_planning`, and `field_reasoning` are LLM-backed and schema-validated.
 - `knowledge_planning` generates targeted model-planned queries instead of fixed query templates.
 - `auto_draft` runs requirement extraction, query planning, real web search, evidence conversion, field reasoning, Markdown rendering, field report rendering, trace persistence, and output persistence.
-- `graph/` now contains the first LangGraph runtime slice: deterministic Supervisor action planning, action routing, runtime tool execution, draft composition, finish handling, and injectable graph dependencies.
+- `graph/` now contains the first LangGraph runtime slice: LLM Supervisor action planning, action routing, runtime tool execution, draft composition, finish handling, and injectable graph dependencies for tests/resume flows.
 - `pwps-agent auto-draft` now routes through the graph-backed `run_graph_auto_draft()` service by default; the older linear `run_auto_draft()` remains available for compatibility and legacy workflow tests.
-- The graph Supervisor now has an injectable planner seam and runtime config: deterministic auto-draft planning remains the default, while `SUPERVISOR_PLANNER=llm` injects `LLMSupervisorPlanner` to request structured `AgentAction` output from an LLM with Domain Skill context.
+- The graph Supervisor now uses `LLMSupervisorPlanner` by default to request structured `AgentAction` output from an LLM with Domain Skill context; `SUPERVISOR_PLANNER` is not an exposed runtime setting.
 - Supervisor action trace now records planner mode, and unsupported LLM-selected graph actions/tools are rejected before routing with failed-state finish behavior.
-- LLM Supervisor planning now has loop protection for repeated completed actions: if the model requests a tool, domain skill, report, or draft step that is already complete, the Supervisor records an override trace event and advances through the deterministic next action instead of relying on LangGraph's recursion limit.
+- LLM Supervisor planning now has loop protection for repeated completed actions and invalid interruptions: if the model requests a completed tool/domain-skill/report/draft step, or asks the user in `auto_draft`, the Supervisor records an override trace event and advances through the safe next action instead of relying on LangGraph's recursion limit.
 - CLI auto-draft now emits structured runtime logs to stderr for run start, graph construction, Supervisor actions, tool events, overrides, and completion; the known upstream LangGraph/LangChain `allowed_objects` pending-deprecation warning is narrowly filtered at package import.
 - `USE_DOMAIN_SKILL` is now a graph action: active domain skills and skill-use history are stored in `PWPSState`, requested skill names are validated through the prompt loader, selections are traceable, and active skill context is injected into later LLM Supervisor prompts.
 - The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
@@ -97,16 +97,28 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 - Graph runtime checkpoint helpers persist safe resume points under `<output_dir>/<run_id>/checkpoints/`, including numbered checkpoint files and `latest.json`.
 - Graph runs can be interrupted after a configured number of runtime steps and resumed from the latest checkpoint by loading the saved `PWPSState` with resume mode.
 - `guided_confirmation` now has a first interaction slice: grouped confirmation views with clarification questions, candidates, evidence snippets, risks, explicit user confirmation records, edit/rollback history, a graph `ASK_USER` pause node, graph-backed resume through compose/finish, state-file CLI commands, and a lightweight local Web UI/API.
-- `guided_confirmation` now supports durable checkpoint-backed resume by `run_id`; after user confirmation it returns through the graph Supervisor, pauses again when candidate fields remain, or composes/finishes when confirmation is complete.
+- `guided_confirmation` now supports durable checkpoint-backed resume by `run_id`; after user confirmation it returns through the graph Supervisor, pauses again while candidate, suggested, conflict, need-confirmation, or explicit candidate-option fields remain, and composes/finishes only when confirmation is complete.
 - `supplement_update` is now a first-class graph path: `UPDATE_STATE` applies user supplements, saved-state and run-checkpoint CLI commands can merge supplemental fields, artifacts are regenerated, and checkpoints are persisted.
 - `domain_skills/` now contains first-stage markdown guidance packages for auto-draft, guided confirmation, evidence handling, and risk review.
 - `prompt_loader` can safely load individual Domain Skills and ordered Domain Skill context bundles for future Supervisor prompts.
-- The graph slice currently covers auto-draft plus guided-confirmation `ASK_USER` pause/resume through draft composition; full LLM Supervisor autonomy, active domain-skill selection, durable checkpoint-backed live user sessions, and richer multi-turn interaction remain future work.
+- The graph slice currently covers autonomous `auto_draft` plus guided-confirmation `ASK_USER` pause/resume through draft composition; durable checkpoint-backed live user sessions and richer multi-turn interaction remain future work.
 - Tests currently cover config loading, contracts, interaction modes, guided confirmation view/history/resume/Web helpers, web search providers, LLM clients, requirement understanding, knowledge planning, evidence reasoning, rendering, state merge, domain skill loading, auto draft workflow, graph auto draft workflow, graph guided-confirmation pause behavior, graph retry/timeout behavior, graph checkpoint/resume behavior, graph Supervisor planner injection, and CLI.
 
 Recent verification:
 
 ```text
+uv run pytest tests/test_config.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
+48 passed
+
+uv run pytest -q
+113 passed
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_config.py tests/test_graph_auto_draft.py tests/test_graph_supervisor_planner.py -q
 22 passed
 

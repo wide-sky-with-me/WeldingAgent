@@ -109,11 +109,11 @@ git diff --check
 passed with no output
 ```
 
-## Phase 2: Promote LLM Supervisor Planning From Seam To Runtime Option
+## Phase 2: Promote LLM Supervisor Planning From Seam To Default Runtime
 
-> **Status:** Completed. `SUPERVISOR_PLANNER=deterministic|llm` is now loaded from config, graph auto-draft injects `LLMSupervisorPlanner` in `llm` mode, Supervisor trace records planner mode, and unsupported LLM-selected graph actions/tools are rejected before routing.
+> **Status:** Completed. The exposed `SUPERVISOR_PLANNER` option has been removed from runtime configuration; graph auto-draft/guided-draft now use `LLMSupervisorPlanner` by default, Supervisor trace records planner mode, unsupported LLM-selected graph actions/tools are rejected before routing, and deterministic action selection remains only as an internal safety/test helper.
 
-**Goal:** Make `LLMSupervisorPlanner` usable from CLI/config while preserving deterministic planner support for tests.
+**Goal:** Make `LLMSupervisorPlanner` the normal CLI/runtime planner while preserving internal deterministic safety progression for tests and loop recovery.
 
 **Why second:** Once graph is the default runtime, the next architectural gap is that the Supervisor is still mostly deterministic by default.
 
@@ -130,7 +130,7 @@ passed with no output
 
 **Work items:**
 
-- [x] Add config for Supervisor planner mode, for example `SUPERVISOR_PLANNER=deterministic|llm`.
+- [x] Remove exposed Supervisor planner mode from config; default runtime behavior is LLM Supervisor planning.
 - [x] Wire CLI/runtime dependency construction so `llm` mode uses `LangChainStructuredClient`.
 - [x] Expand `LLMSupervisorPlanner` prompt payload to include enough state for safe action choice: pending action, recent trace summaries, current risks, missing fields, confirmations, and available tools.
 - [x] Keep available actions constrained to implemented graph actions only.
@@ -149,19 +149,27 @@ git diff --check
 
 **Manual smoke:**
 
-```text
-SUPERVISOR_PLANNER=deterministic uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-smoke --run-id deterministic_graph_smoke
-```
-
-For live LLM smoke, use the configured `.env` provider only after tests pass:
+Use the configured `.env` provider only after tests pass:
 
 ```text
-SUPERVISOR_PLANNER=llm uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-smoke --run-id llm_supervisor_smoke
+uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-smoke --run-id llm_supervisor_smoke
 ```
 
 Verification:
 
 ```text
+uv run pytest tests/test_config.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
+48 passed
+
+uv run pytest -q
+113 passed
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
 15 passed, 1 warning
 

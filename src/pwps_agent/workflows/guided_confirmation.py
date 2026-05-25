@@ -4,7 +4,12 @@ from pydantic import BaseModel
 
 from pwps_agent.config import Settings
 from pwps_agent.core.contracts import AgentAction
-from pwps_agent.core.modes import confirm_fields, edit_confirmation, rollback_confirmation
+from pwps_agent.core.modes import (
+    GUIDED_CORE_CONFIRMATION_FIELDS,
+    confirm_fields,
+    edit_confirmation,
+    rollback_confirmation,
+)
 from pwps_agent.core.state import PWPSState
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.checkpoints import load_latest_checkpoint
@@ -140,6 +145,11 @@ def resume_guided_confirmation_from_checkpoint(
 
 def _has_pending_confirmation_fields(state: PWPSState) -> bool:
     return any(
-        field.status in {"candidate", "need_confirmation"}
+        field.status in {"candidate", "suggested", "need_confirmation", "conflict"}
+        or (field.status != "user_confirmed" and bool(field.candidates))
+        or (
+            field.field_id in GUIDED_CORE_CONFIRMATION_FIELDS
+            and field.status == "missing"
+        )
         for field in state.fields.values()
     )

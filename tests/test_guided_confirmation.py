@@ -56,6 +56,38 @@ def test_confirmation_view_groups_fields_with_candidates_evidence_and_risks() ->
     assert field["risks"][0]["risk_id"] == "risk_1"
 
 
+def test_confirmation_view_includes_missing_core_fields_in_guided_mode() -> None:
+    state = create_initial_state(
+        user_input="Generate a pWPS draft.",
+        interaction_mode="guided_confirmation",
+    )
+
+    view = build_confirmation_view(state)
+
+    field_ids = {
+        field["field_id"]
+        for group in view["groups"]
+        for field in group["fields"]
+    }
+    assert {
+        "applicable_standard",
+        "base_material",
+        "thickness",
+        "workpiece_type",
+        "welding_process",
+        "joint_type",
+        "welding_position",
+    } <= field_ids
+    base_material = next(
+        field
+        for group in view["groups"]
+        for field in group["fields"]
+        if field["field_id"] == "base_material"
+    )
+    assert base_material["status"] == "missing"
+    assert base_material["confirmation_options"][0]["action"] == "provide_value"
+
+
 def test_confirmation_rollback_restores_previous_field_state() -> None:
     state = create_initial_state("Q355B 12mm plate GMAW", "guided_confirmation")
     state.fields["filler_material"].value = "ER50-6"

@@ -12,7 +12,10 @@ promote only explicit user choices to confirmed fields.
 - Present a small group of related fields.
 - Show the current value, candidate value, evidence reference, confidence, and
   risk note for each field.
-- Ask for confirmation, modification, skip, or deferral.
+- If critical input fields are missing, ask for them with a short explanation of
+  why they affect the draft.
+- Ask for confirmation, modification, skip, or deferral with concise options
+  rather than open-ended interrogation.
 - Record user-confirmed values in `PWPSState.confirmations`.
 
 ## Constraints

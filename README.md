@@ -70,13 +70,12 @@ LLM_STRUCTURED_OUTPUT_METHOD=function_calling
 LLM_THINKING_TYPE=disabled
 ```
 
-Supervisor planner mode:
+The graph runtime uses the LLM Supervisor for structured `AgentAction` planning. Deterministic action selection is kept only as an internal safety helper and is not exposed as a runtime mode.
 
-```text
-SUPERVISOR_PLANNER=deterministic
-```
+Interaction mode behavior:
 
-Use `SUPERVISOR_PLANNER=llm` to let the LLM choose structured `AgentAction` values. Deterministic mode is the safer default for smoke testing.
+- `auto_draft`: autonomous draft generation. The Supervisor should not pause to ask the user; it searches configured sources, uses model fallback only as low-confidence suggestions, and finishes with uncertainty visible.
+- `guided_confirmation`: human-in-the-loop refinement. The Supervisor pauses on missing core inputs and unconfirmed candidate/suggested/conflict fields, presenting options and evidence so the user can confirm, modify, or defer each group.
 
 Web search:
 

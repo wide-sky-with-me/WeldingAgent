@@ -22,7 +22,7 @@ from pwps_agent.workflows.supplement_update import (
     resume_supplement_update,
     resume_supplement_update_from_checkpoint,
 )
-from pwps_agent.workflows.auto_draft import run_graph_auto_draft
+from pwps_agent.workflows.auto_draft import run_graph_auto_draft, run_graph_guided_draft
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     auto_draft.add_argument("requirement")
     auto_draft.add_argument("--output-dir", type=Path, default=None)
     auto_draft.add_argument("--run-id", default="run_cli")
+
+    guided_draft = subparsers.add_parser("guided-draft")
+    guided_draft.add_argument("requirement")
+    guided_draft.add_argument("--output-dir", type=Path, default=None)
+    guided_draft.add_argument("--run-id", default="run_cli")
 
     guided_confirm = subparsers.add_parser("guided-confirm")
     guided_confirm.add_argument("state_path", type=Path)
@@ -95,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         LOGGER.info(
             "Starting auto-draft run_id=%s planner=%s output_dir=%s",
             args.run_id,
-            settings.supervisor.planner,
+            "llm",
             settings.paths.output_dir,
         )
         try:
@@ -110,6 +115,35 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         LOGGER.info(
             "Completed auto-draft run_id=%s status=%s output_dir=%s",
+            args.run_id,
+            result.state.status,
+            result.output_dir,
+        )
+        print(result.output_dir)
+        return 0
+
+    if args.command == "guided-draft":
+        settings = load_settings()
+        if args.output_dir is not None:
+            settings.paths.output_dir = args.output_dir
+        LOGGER.info(
+            "Starting guided-draft run_id=%s planner=%s output_dir=%s",
+            args.run_id,
+            "llm",
+            settings.paths.output_dir,
+        )
+        try:
+            result = run_graph_guided_draft(
+                args.requirement,
+                settings=settings,
+                run_id=args.run_id,
+            )
+        except Exception as exc:
+            LOGGER.error("Guided-draft failed run_id=%s error=%s", args.run_id, exc)
+            print(f"pwps-agent: {exc}", file=sys.stderr)
+            return 1
+        LOGGER.info(
+            "Completed guided-draft run_id=%s status=%s output_dir=%s",
             args.run_id,
             result.state.status,
             result.output_dir,

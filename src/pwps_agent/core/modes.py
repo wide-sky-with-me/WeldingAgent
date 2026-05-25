@@ -16,6 +16,16 @@ SECTION_TITLES = {
     "E": "热处理与温控",
 }
 
+GUIDED_CORE_CONFIRMATION_FIELDS = {
+    "applicable_standard",
+    "base_material",
+    "thickness",
+    "workpiece_type",
+    "welding_process",
+    "joint_type",
+    "welding_position",
+}
+
 
 def build_confirmation_view(state: PWPSState) -> dict[str, Any]:
     evidence_by_id = {item.evidence_id: item for item in state.evidence}
@@ -24,7 +34,7 @@ def build_confirmation_view(state: PWPSState) -> dict[str, Any]:
         fields = []
         for field_id, _label in definitions:
             field = state.fields[field_id]
-            if not _field_needs_confirmation(field):
+            if not _field_needs_confirmation(field, field_id, state.interaction_mode):
                 continue
             evidence_ids = set(field.evidence_ids)
             for candidate in field.candidates:
@@ -45,6 +55,7 @@ def build_confirmation_view(state: PWPSState) -> dict[str, Any]:
                         if evidence_id in evidence_by_id
                     ],
                     "risks": _risks_for_field(state, field_id),
+                    "confirmation_options": _confirmation_options(field),
                 }
             )
         if fields:
@@ -226,10 +237,53 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _field_needs_confirmation(field) -> bool:
-    return field.status in {"candidate", "suggested", "need_confirmation", "conflict"} or bool(
-        field.candidates
+def _field_needs_confirmation(
+    field,
+    field_id: str,
+    interaction_mode: str,
+) -> bool:
+    if (
+        interaction_mode == "guided_confirmation"
+        and field_id in GUIDED_CORE_CONFIRMATION_FIELDS
+        and field.status == "missing"
+    ):
+        return True
+    return field.status in {"candidate", "suggested", "need_confirmation", "conflict"} or (
+        field.status != "user_confirmed" and bool(field.candidates)
     )
+
+
+def _confirmation_options(field) -> list[dict[str, str]]:
+    if field.status == "missing":
+        return [
+            {
+                "action": "provide_value",
+                "label": "Provide a value",
+                "description": "Use this when the field is known from the project or drawing.",
+            },
+            {
+                "action": "defer",
+                "label": "Defer",
+                "description": "Keep the field marked as missing and continue with visible risk.",
+            },
+        ]
+    return [
+        {
+            "action": "accept",
+            "label": "Accept candidate",
+            "description": "Promote this value only if it matches the actual project requirement.",
+        },
+        {
+            "action": "modify",
+            "label": "Modify",
+            "description": "Provide a corrected project-specific value.",
+        },
+        {
+            "action": "defer",
+            "label": "Defer",
+            "description": "Keep the value unconfirmed for later review.",
+        },
+    ]
 
 
 def _candidate_from_current_value(field) -> list[dict[str, Any]]:

@@ -6,6 +6,20 @@ from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.workflows.auto_draft import AutoDraftResult
 
 
+def _fill_minimum_core_fields(state) -> None:
+    for field_id, value in {
+        "applicable_standard": "AWS D1.1",
+        "base_material": "Q355B",
+        "thickness": "12mm",
+        "workpiece_type": "plate",
+        "welding_process": "GMAW",
+        "joint_type": "butt joint",
+        "welding_position": "flat",
+    }.items():
+        state.fields[field_id].value = value
+        state.fields[field_id].status = "filled"
+
+
 def test_cli_parser_accepts_auto_draft_requirement_and_output_dir(tmp_path: Path) -> None:
     parser = build_parser()
 
@@ -21,6 +35,26 @@ def test_cli_parser_accepts_auto_draft_requirement_and_output_dir(tmp_path: Path
     assert args.command == "auto-draft"
     assert args.requirement == "Q355B 12mm GMAW pWPS"
     assert args.output_dir == tmp_path
+
+
+def test_cli_parser_accepts_guided_draft_requirement_and_output_dir(tmp_path: Path) -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "guided-draft",
+            "Q355B 12mm GMAW pWPS",
+            "--output-dir",
+            str(tmp_path),
+            "--run-id",
+            "guided_cli",
+        ]
+    )
+
+    assert args.command == "guided-draft"
+    assert args.requirement == "Q355B 12mm GMAW pWPS"
+    assert args.output_dir == tmp_path
+    assert args.run_id == "guided_cli"
 
 
 def test_cli_parser_accepts_guided_confirmation_commands(tmp_path: Path) -> None:
@@ -133,6 +167,7 @@ def test_cli_guided_confirmation_resume_writes_artifacts(tmp_path: Path, capsys)
     state_path = tmp_path / "state.json"
     state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation", run_id="cli_resume")
     state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
     state_path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
@@ -159,6 +194,7 @@ def test_cli_guided_confirmation_resume_writes_artifacts(tmp_path: Path, capsys)
 def test_cli_guided_confirmation_resume_run_loads_checkpoint(tmp_path: Path, capsys) -> None:
     state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation", run_id="cli_resume_run")
     state.status = "need_user_input"
+    _fill_minimum_core_fields(state)
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
     save_checkpoint(state, tmp_path, "ask_user")
@@ -287,6 +323,41 @@ def test_cli_auto_draft_emits_progress_logs(monkeypatch, tmp_path: Path, capsys)
     assert exit_code == 0
     assert "Starting auto-draft run_id=cli_logs" in captured.err
     assert "Completed auto-draft run_id=cli_logs" in captured.err
+
+
+def test_cli_guided_draft_uses_guided_workflow(monkeypatch, tmp_path: Path, capsys) -> None:
+    calls = {}
+
+    def fake_run_graph_guided_draft(requirement, settings, run_id):
+        calls["requirement"] = requirement
+        calls["output_dir"] = settings.paths.output_dir
+        calls["run_id"] = run_id
+        state = create_initial_state(requirement, "guided_confirmation", run_id=run_id)
+        state.status = "need_user_input"
+        return AutoDraftResult(state=state, output_dir=str(tmp_path / run_id))
+
+    monkeypatch.setattr("pwps_agent.cli.run_graph_guided_draft", fake_run_graph_guided_draft, raising=False)
+
+    exit_code = main(
+        [
+            "guided-draft",
+            "Q355B 12mm GMAW pWPS",
+            "--output-dir",
+            str(tmp_path),
+            "--run-id",
+            "guided_cli",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert str(tmp_path / "guided_cli") in captured.out
+    assert "Completed guided-draft run_id=guided_cli status=need_user_input" in captured.err
+    assert calls == {
+        "requirement": "Q355B 12mm GMAW pWPS",
+        "output_dir": tmp_path,
+        "run_id": "guided_cli",
+    }
 
 
 def test_cli_reports_runtime_failure_without_traceback(monkeypatch, capsys) -> None:

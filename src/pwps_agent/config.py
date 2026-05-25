@@ -35,10 +35,6 @@ class WebSearchSettings(BaseModel):
     brave_safety: str = "moderate"
 
 
-class SupervisorSettings(BaseModel):
-    planner: Literal["deterministic", "llm"] = "deterministic"
-
-
 class LocalDocSettings(BaseModel):
     max_results: int = 5
     snippet_chars: int = 420
@@ -70,7 +66,6 @@ class PathSettings(BaseModel):
 
 class Settings(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
-    supervisor: SupervisorSettings = Field(default_factory=SupervisorSettings)
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
     local_docs: LocalDocSettings = Field(default_factory=LocalDocSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
@@ -93,9 +88,6 @@ def load_settings(env_file: str | Path = ".env") -> Settings:
                 "function_calling",
             ),
             thinking_type=values.get("LLM_THINKING_TYPE", ""),
-        ),
-        supervisor=SupervisorSettings(
-            planner=values.get("SUPERVISOR_PLANNER", "deterministic"),
         ),
         web_search=WebSearchSettings(
             provider=values.get("WEB_SEARCH_PROVIDER", "tavily"),

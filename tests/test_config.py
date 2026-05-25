@@ -15,7 +15,6 @@ EXPECTED_ENV_TEMPLATE_KEYS = {
     "OPENAI_BASE_URL",
     "OPENAI_MODEL",
     "KNOWLEDGE_SOURCES",
-    "SUPERVISOR_PLANNER",
     "WEB_SEARCH_PROVIDER",
     "WEB_SEARCH_MAX_RESULTS",
     "WEB_SEARCH_TIMEOUT_SECONDS",
@@ -48,7 +47,6 @@ def test_loads_provider_neutral_llm_settings_from_env_file(tmp_path: Path) -> No
                 "LLM_TEMPERATURE=0.1",
                 "LLM_STRUCTURED_OUTPUT_METHOD=function_calling",
                 "LLM_THINKING_TYPE=disabled",
-                "SUPERVISOR_PLANNER=llm",
                 "WEB_SEARCH_PROVIDER=brave",
                 "BRAVE_SEARCH_API_KEY=brave-key",
             ]
@@ -64,18 +62,17 @@ def test_loads_provider_neutral_llm_settings_from_env_file(tmp_path: Path) -> No
     assert settings.llm.temperature == 0.1
     assert settings.llm.structured_output_method == "function_calling"
     assert settings.llm.thinking_type == "disabled"
-    assert settings.supervisor.planner == "llm"
     assert settings.web_search.provider == "brave"
     assert settings.web_search.brave_api_key == "brave-key"
 
 
-def test_supervisor_planner_defaults_to_deterministic(tmp_path: Path) -> None:
+def test_supervisor_planner_setting_is_not_exposed(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
 
     settings = load_settings(env_file)
 
-    assert settings.supervisor.planner == "deterministic"
+    assert not hasattr(settings, "supervisor")
 
 
 def test_loads_configured_knowledge_source_order(tmp_path: Path) -> None:

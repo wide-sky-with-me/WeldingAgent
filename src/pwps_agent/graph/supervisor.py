@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from pwps_agent.agent.prompt_loader import load_domain_skill, load_domain_skill_bundle
 from pwps_agent.core.contracts import AgentAction
+from pwps_agent.core.modes import GUIDED_CORE_CONFIRMATION_FIELDS
 from pwps_agent.core.state import PWPSState
 from pwps_agent.graph.state import GraphState
 from pwps_agent.llm.structured import complete_structured
@@ -13,6 +14,12 @@ from pwps_agent.llm.structured import complete_structured
 
 DEFAULT_DOMAIN_SKILLS = [
     "pwps_auto_draft",
+    "pwps_evidence_handling",
+    "pwps_risk_review",
+]
+
+GUIDED_CONFIRMATION_DOMAIN_SKILLS = [
+    "pwps_guided_confirmation",
     "pwps_evidence_handling",
     "pwps_risk_review",
 ]
@@ -33,14 +40,6 @@ class SupervisorPlanner(Protocol):
         ...
 
 
-class DeterministicAutoDraftPlanner:
-    def __init__(self, knowledge_sources: list[str] | None = None) -> None:
-        self.knowledge_sources = knowledge_sources
-
-    def plan_next_action(self, state: PWPSState) -> AgentAction:
-        return plan_next_auto_draft_action(state, self.knowledge_sources)
-
-
 class LLMSupervisorPlanner:
     def __init__(
         self,
@@ -59,19 +58,20 @@ class LLMSupervisorPlanner:
         )
 
     def _system_prompt(self, state: PWPSState) -> str:
-        skill_names = state.active_domain_skills or self.domain_skill_names
+        skill_names = state.active_domain_skills or self._default_skill_names(state)
         domain_context = load_domain_skill_bundle(skill_names)
         return "\n\n".join(
             [
                 "You are the LLM Supervisor for a first-stage pWPS draft system.",
                 "Choose exactly one next AgentAction. Do not execute tools yourself.",
                 "Preserve uncertainty. Do not invent project metadata. Never claim formal approval or compliance.",
+                self._mode_instruction(state),
                 domain_context,
             ]
         )
 
     def _user_prompt(self, state: PWPSState) -> str:
-        active_domain_skills = state.active_domain_skills or self.domain_skill_names
+        active_domain_skills = state.active_domain_skills or self._default_skill_names(state)
         payload = {
             "task_goal": state.task_goal,
             "interaction_mode": state.interaction_mode,
@@ -105,16 +105,45 @@ class LLMSupervisorPlanner:
         }
         return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
 
+    def _default_skill_names(self, state: PWPSState) -> list[str]:
+        if self.domain_skill_names != DEFAULT_DOMAIN_SKILLS:
+            return self.domain_skill_names
+        if state.interaction_mode == "guided_confirmation":
+            return GUIDED_CONFIRMATION_DOMAIN_SKILLS
+        return self.domain_skill_names
+
+    def _mode_instruction(self, state: PWPSState) -> str:
+        if state.interaction_mode == "guided_confirmation":
+            return (
+                "Interaction mode is guided_confirmation: ask the user when critical "
+                "information is missing or fields need confirmation. Present concise "
+                "options, explain the tradeoff/evidence for each option, and keep "
+                "iterating until no candidate, suggested, conflict, or explicit "
+                "candidate-option fields remain."
+            )
+        if state.interaction_mode == "auto_draft":
+            return (
+                "Interaction mode is auto_draft: do not ask the user. Act as the "
+                "autonomous drafter, use configured local/web knowledge sources, use "
+                "model fallback only as suggested low-confidence values, and complete "
+                "the draft with uncertainty clearly marked."
+            )
+        return (
+            "Interaction mode is supplement_update: apply the supplemental user "
+            "information, regenerate affected draft/report artifacts, and preserve "
+            "source and confirmation status."
+        )
+
 
 def supervisor_node(graph_state: GraphState) -> dict:
     state = graph_state["pwps_state"].model_copy(deep=True)
     context = graph_state["context"]
-    planner = context.supervisor_planner or DeterministicAutoDraftPlanner(
-        context.settings.knowledge.sources
+    planner = context.supervisor_planner or LLMSupervisorPlanner(
+        client=context.dependencies.llm_client
     )
     planner_mode = context.supervisor_planner_mode
     if planner_mode is None:
-        planner_mode = "injected" if context.supervisor_planner is not None else "deterministic"
+        planner_mode = "injected" if context.supervisor_planner is not None else "llm"
     action = planner.plan_next_action(state)
     validation_error = _validate_action(action)
     if validation_error is not None:
@@ -152,7 +181,7 @@ def supervisor_node(graph_state: GraphState) -> dict:
                 "step": len(state.trace) + 1,
                 "node": "supervisor",
                 "event_type": "agent_action_overridden",
-                "summary": "Planner requested an already completed action; using deterministic next action.",
+                "summary": "Planner requested an already completed action; using safe next action.",
                 "payload": {
                     "planner": planner_mode,
                     "requested_action_type": action.action_type,
@@ -232,6 +261,18 @@ def _override_repeated_completed_action(
     action: AgentAction,
     knowledge_sources: list[str] | None = None,
 ) -> AgentAction | None:
+    if (
+        _node_completed(state, "compose_draft")
+        and state.interaction_mode == "guided_confirmation"
+        and _has_pending_confirmation_fields(state)
+    ):
+        if action.action_type != "ASK_USER":
+            return AgentAction(
+                action_type="ASK_USER",
+                rationale_summary="Draft artifacts are composed and fields still need guided confirmation.",
+                expected_state_change="Pause with grouped confirmation view.",
+            )
+        return None
     if _node_completed(state, "compose_draft") and action.action_type != "FINISH":
         return AgentAction(
             action_type="FINISH",
@@ -239,6 +280,8 @@ def _override_repeated_completed_action(
             expected_state_change="Mark graph run as done.",
             stop_reason="auto_draft_complete",
         )
+    if state.interaction_mode == "auto_draft" and action.action_type == "ASK_USER":
+        return plan_next_auto_draft_action(state, knowledge_sources)
     if action.action_type == "CALL_TOOL" and action.tool_name:
         if _node_completed(state, action.tool_name):
             return plan_next_auto_draft_action(state, knowledge_sources)
@@ -260,6 +303,19 @@ def _override_repeated_completed_action(
 
 def _node_completed(state: PWPSState, node: str) -> bool:
     return any(entry.get("node") == node for entry in state.trace)
+
+
+def _has_pending_confirmation_fields(state: PWPSState) -> bool:
+    return any(
+        field.status in {"candidate", "suggested", "need_confirmation", "conflict"}
+        or (field.status != "user_confirmed" and bool(field.candidates))
+        or (
+            state.interaction_mode == "guided_confirmation"
+            and field.field_id in GUIDED_CORE_CONFIRMATION_FIELDS
+            and field.status == "missing"
+        )
+        for field in state.fields.values()
+    )
 
 
 def plan_next_auto_draft_action(

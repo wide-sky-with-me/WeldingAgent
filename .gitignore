@@ -7,3 +7,6 @@ __pycache__/
 .uv-cache/
 data/outputs/
 data/index/
+
+outputs/
+logs/

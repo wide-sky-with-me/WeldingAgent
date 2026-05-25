@@ -5,8 +5,10 @@ Use this Domain Skill when the interaction mode is `auto_draft`.
 ## Role
 
 Guide the LLM Supervisor to produce a draft pWPS from minimum user input while
-preserving uncertainty. The Supervisor remains the decision maker. Domain Skills
-do not execute Runtime Tools and do not mutate `PWPSState` directly.
+preserving uncertainty. In this mode the Supervisor acts as the autonomous
+drafter: it searches, reasons, chooses candidate values, and completes the run
+without asking the user. Domain Skills do not execute Runtime Tools and do not
+mutate `PWPSState` directly.
 
 ## Runtime Tools
 

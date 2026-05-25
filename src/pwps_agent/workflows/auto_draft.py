@@ -166,21 +166,50 @@ def run_graph_auto_draft(
     dependencies: AutoDraftDependencies | None = None,
     run_id: str = "run_local",
 ) -> AutoDraftResult:
+    return run_graph_draft(
+        requirement,
+        settings=settings,
+        dependencies=dependencies,
+        run_id=run_id,
+        interaction_mode="auto_draft",
+    )
+
+
+def run_graph_guided_draft(
+    requirement: str,
+    settings: Settings,
+    dependencies: AutoDraftDependencies | None = None,
+    run_id: str = "run_local",
+) -> AutoDraftResult:
+    return run_graph_draft(
+        requirement,
+        settings=settings,
+        dependencies=dependencies,
+        run_id=run_id,
+        interaction_mode="guided_confirmation",
+    )
+
+
+def run_graph_draft(
+    requirement: str,
+    settings: Settings,
+    dependencies: AutoDraftDependencies | None = None,
+    run_id: str = "run_local",
+    interaction_mode: str = "auto_draft",
+) -> AutoDraftResult:
     from pwps_agent.graph.builder import build_auto_draft_graph
     from pwps_agent.graph.state import GraphRuntimeContext
     from pwps_agent.graph.supervisor import LLMSupervisorPlanner
 
     deps = dependencies or _build_dependencies(settings)
     LOGGER.info(
-        "Building graph auto-draft run_id=%s planner=%s output_dir=%s",
+        "Building graph draft run_id=%s mode=%s planner=llm output_dir=%s",
         run_id,
-        settings.supervisor.planner,
+        interaction_mode,
         settings.paths.output_dir,
     )
-    supervisor_planner = None
-    if settings.supervisor.planner == "llm":
-        supervisor_planner = LLMSupervisorPlanner(client=deps.llm_client)
-    state = create_initial_state(requirement, "auto_draft", run_id=run_id)
+    supervisor_planner = LLMSupervisorPlanner(client=deps.llm_client)
+    state = create_initial_state(requirement, interaction_mode, run_id=run_id)
     graph = build_auto_draft_graph()
     result = graph.invoke(
         {
@@ -189,7 +218,7 @@ def run_graph_auto_draft(
                 settings=settings,
                 dependencies=deps,
                 supervisor_planner=supervisor_planner,
-                supervisor_planner_mode=settings.supervisor.planner,
+                supervisor_planner_mode="llm",
             ),
         }
     )

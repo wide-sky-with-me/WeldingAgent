@@ -7,6 +7,7 @@ from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.checkpoints import load_latest_checkpoint
 from pwps_agent.graph.state import GraphRuntimeContext
+from pwps_agent.graph.supervisor import plan_next_auto_draft_action
 from pwps_agent.workflows.auto_draft import AutoDraftDependencies
 
 
@@ -74,6 +75,14 @@ class StaticReasoningTool:
         )
 
 
+class ProgressPlanner:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    def plan_next_action(self, state):
+        return plan_next_auto_draft_action(state, self.settings.knowledge.sources)
+
+
 def _context(tmp_path: Path, interrupt_after_steps=None):
     settings = Settings()
     settings.paths.output_dir = tmp_path
@@ -87,6 +96,7 @@ def _context(tmp_path: Path, interrupt_after_steps=None):
     return GraphRuntimeContext(
         settings=settings,
         dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
         checkpoint_enabled=True,
         interrupt_after_steps=interrupt_after_steps,
     )

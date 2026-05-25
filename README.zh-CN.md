@@ -68,13 +68,12 @@ LLM_STRUCTURED_OUTPUT_METHOD=function_calling
 LLM_THINKING_TYPE=disabled
 ```
 
-Supervisor planner 模式：
+图运行时默认使用 LLM Supervisor 输出结构化 `AgentAction`。确定性动作选择只保留为内部安全辅助，不作为运行模式暴露。
 
-```text
-SUPERVISOR_PLANNER=deterministic
-```
+交互模式行为：
 
-`deterministic` 是更适合 smoke test 的默认模式。设置为 `SUPERVISOR_PLANNER=llm` 后，LLM 可以输出结构化 `AgentAction` 来选择下一步动作。
+- `auto_draft`：自动草稿模式。Supervisor 不应暂停询问用户，而是按配置检索本地/网络来源；模型兜底只能生成低置信度 `suggested` 值，并在不确定性可见的前提下完成草稿。
+- `guided_confirmation`：人机协同确认模式。Supervisor 会在关键输入缺失、候选/建议/冲突字段未确认时暂停，给出选项、依据和解释，引导用户确认、修改或暂缓。
 
 网络搜索配置示例：
 

@@ -6,6 +6,7 @@ from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
 from pwps_agent.core.state import PWPSState, create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.state import GraphRuntimeContext
+from pwps_agent.graph.supervisor import plan_next_auto_draft_action
 from pwps_agent.knowledge.local_doc_provider import LocalDocumentProvider
 from pwps_agent.workflows.auto_draft import AutoDraftDependencies, run_graph_auto_draft
 
@@ -204,6 +205,14 @@ class PlanningClient:
         return self.actions.pop(0)
 
 
+class ProgressPlanner:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    def plan_next_action(self, state):
+        return plan_next_auto_draft_action(state, self.settings.knowledge.sources)
+
+
 def test_auto_draft_graph_executes_tool_sequence_and_persists_artifacts(tmp_path: Path):
     settings = Settings()
     settings.paths.output_dir = tmp_path
@@ -214,7 +223,11 @@ def test_auto_draft_graph_executes_tool_sequence_and_persists_artifacts(tmp_path
         knowledge_planning_tool=StaticPlanningTool(),
         field_reasoning_tool=StaticReasoningTool(),
     )
-    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
         "auto_draft",
@@ -267,7 +280,7 @@ def test_run_graph_auto_draft_service_invokes_graph_and_persists_artifacts(tmp_p
     settings = Settings()
     settings.paths.output_dir = tmp_path
     dependencies = AutoDraftDependencies(
-        llm_client=object(),
+        llm_client=PlanningClient(),
         search_provider=StaticSearchProvider(),
         requirement_tool=StaticRequirementTool(),
         knowledge_planning_tool=StaticPlanningTool(),
@@ -302,7 +315,6 @@ def test_run_graph_auto_draft_service_invokes_graph_and_persists_artifacts(tmp_p
 def test_run_graph_auto_draft_can_use_llm_supervisor_planner_from_settings(tmp_path: Path):
     settings = Settings()
     settings.paths.output_dir = tmp_path
-    settings.supervisor.planner = "llm"
     planning_client = PlanningClient()
     dependencies = AutoDraftDependencies(
         llm_client=planning_client,
@@ -362,7 +374,11 @@ def test_graph_auto_draft_collects_local_doc_evidence_and_persists_index(tmp_pat
         knowledge_planning_tool=LocalDocPlanningTool(),
         field_reasoning_tool=StaticReasoningTool(),
     )
-    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
         "auto_draft",
@@ -390,7 +406,11 @@ def test_graph_runs_web_for_mixed_source_queries(tmp_path: Path):
         knowledge_planning_tool=MixedSourcePlanningTool(),
         field_reasoning_tool=StaticReasoningTool(),
     )
-    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
         "auto_draft",
@@ -417,7 +437,11 @@ def test_graph_skips_local_doc_when_knowledge_sources_disable_it(tmp_path: Path)
         knowledge_planning_tool=MixedSourcePlanningTool(),
         field_reasoning_tool=StaticReasoningTool(),
     )
-    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
         "auto_draft",
@@ -445,7 +469,11 @@ def test_graph_marks_model_fallback_fields_as_suggested_without_external_evidenc
         knowledge_planning_tool=StaticPlanningTool(),
         field_reasoning_tool=StaticModelFallbackReasoningTool(),
     )
-    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
         "auto_draft",
@@ -477,7 +505,11 @@ def test_graph_does_not_write_status_words_as_field_values(tmp_path: Path):
         knowledge_planning_tool=StaticPlanningTool(),
         field_reasoning_tool=StatusWordReasoningTool(),
     )
-    context = GraphRuntimeContext(settings=settings, dependencies=dependencies)
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
         "auto_draft",
