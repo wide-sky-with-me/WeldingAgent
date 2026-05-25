@@ -59,3 +59,32 @@ def test_render_field_report_lists_retained_candidates_on_filled_fields() -> Non
     report = render_field_report(state)
 
     assert report["retained_candidates"]["base_material"][0]["value"] == "ASTM A572 Grade 50"
+
+
+def test_render_draft_uses_structured_sections_when_present() -> None:
+    state = create_initial_state(
+        user_input="Q355B 12mm plate GMAW",
+        interaction_mode="auto_draft",
+    )
+    state.sections = {
+        "A": {
+            "title": "文件与项目元信息",
+            "fields": [
+                {
+                    "field_id": "project_name",
+                    "label": "项目名称",
+                    "value": "待确认",
+                    "status": "missing",
+                    "confidence": "unknown",
+                    "evidence_ids": [],
+                    "source": None,
+                    "note": "",
+                }
+            ],
+        }
+    }
+
+    markdown = render_pwps_draft(state)
+
+    assert "项目名称" in markdown
+    assert "confidence=unknown" in markdown

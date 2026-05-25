@@ -7,6 +7,7 @@ from pwps_agent.graph.nodes import (
     call_tool_node,
     compose_draft_node,
     finish_node,
+    generate_report_node,
     update_state_node,
     use_domain_skill_node,
 )
@@ -23,6 +24,7 @@ def build_auto_draft_graph():
     graph.add_node("update_state", update_state_node)
     graph.add_node("ask_user", ask_user_node)
     graph.add_node("compose_draft", compose_draft_node)
+    graph.add_node("generate_report", generate_report_node)
     graph.add_node("finish", finish_node)
 
     graph.add_edge(START, "supervisor")
@@ -35,6 +37,7 @@ def build_auto_draft_graph():
             "call_tool": "call_tool",
             "ask_user": "ask_user",
             "compose_draft": "compose_draft",
+            "generate_report": "generate_report",
             "finish": "finish",
         },
     )
@@ -50,6 +53,7 @@ def build_auto_draft_graph():
     graph.add_edge("ask_user", END)
     graph.add_edge("use_domain_skill", "supervisor")
     graph.add_edge("update_state", "supervisor")
+    graph.add_edge("generate_report", "supervisor")
     graph.add_edge("compose_draft", "supervisor")
     graph.add_edge("finish", END)
     return graph.compile()

@@ -88,6 +88,7 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 - Web search providers now support instance-level query caching plus configurable transient-error retry/backoff, while avoiding retries for non-transient authorization failures.
 - Evidence converted from web search now includes source-tier and confidence metadata, classifying references as official-standard, textbook, or webpage tier while preserving candidate/reference-only semantics.
 - Run persistence now writes `evidence_index.json` with retrieval context, evidence records, evidence-to-field mappings, and field-to-evidence mappings for reuse and audit.
+- Structured section generation and risk reporting now run as explicit tools before draft persistence; `PWPSState.sections` and `field_report` carry structured output for the renderer.
 - State patch merging now goes through `core/state_merge.py`, with allowed patch keys, unknown-key/unknown-field merge warnings, field priority protection, candidate preservation, timestamp metadata, and ID-based de-duplication for knowledge queries, search results, and evidence.
 - Supervisor action decisions now include action metadata in trace, including action type, tool name, and action index.
 - Graph runtime checkpoint helpers persist safe resume points under `<output_dir>/<run_id>/checkpoints/`, including numbered checkpoint files and `latest.json`.
@@ -103,6 +104,18 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 Recent verification:
 
 ```text
+uv run pytest tests/test_section_generation.py tests/test_risk_report.py tests/test_render.py -q
+8 passed
+
+uv run pytest -q
+96 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_local_doc_provider.py tests/test_local_doc_search.py tests/test_graph_auto_draft.py -q
 10 passed, 1 warning
 

@@ -394,6 +394,8 @@ passed with no output
 
 ## Phase 7: Split Section Generation And Risk Review Into Explicit Tools
 
+> **Status:** Completed. Structured section generation and risk reporting are now explicit runtime tools; compose renders structured sections/reports and graph trace records section/risk generation before draft persistence.
+
 **Goal:** Make A/B/C/D/E section generation and risk report generation explicit runtime tools instead of only renderer behavior.
 
 **Why seventh:** Current rendering is useful, but the architecture expects traceable generation/reporting actions with uncertainty and risk semantics.
@@ -414,13 +416,13 @@ passed with no output
 
 **Work items:**
 
-- [ ] Add Pydantic schemas for section generation output and risk report output.
-- [ ] Keep field status/source/evidence/confidence visible in generated sections.
-- [ ] Keep project metadata blank or `待确认` when not user-provided.
-- [ ] Add graph actions for `GENERATE_REPORT` and section generation where needed.
-- [ ] Persist generated sections and risk report in `PWPSState`.
-- [ ] Keep Markdown renderer as a pure formatter over structured state.
-- [ ] Add tests for missing-field risks, low-confidence evidence, thermal/PWHT risk notes, and web-reference-only wording.
+- [x] Add Pydantic schemas for section generation output and risk report output.
+- [x] Keep field status/source/evidence/confidence visible in generated sections.
+- [x] Keep project metadata blank or `待确认` when not user-provided.
+- [x] Add graph actions for `GENERATE_REPORT` and section generation where needed.
+- [x] Persist generated sections and risk report in `PWPSState`.
+- [x] Keep Markdown renderer as a pure formatter over structured state.
+- [x] Add tests for missing-field risks, low-confidence evidence, thermal/PWHT risk notes, and web-reference-only wording.
 
 **Acceptance gates:**
 
@@ -429,6 +431,22 @@ uv run pytest tests/test_section_generation.py tests/test_risk_report.py tests/t
 uv run pytest -q
 uv run python -m compileall -q src tests
 git diff --check
+```
+
+Verification:
+
+```text
+uv run pytest tests/test_section_generation.py tests/test_risk_report.py tests/test_render.py -q
+8 passed
+
+uv run pytest -q
+96 passed, 1 warning
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
 ```
 
 ## Phase 8: Add End-To-End Smoke Harness And Sample Runs

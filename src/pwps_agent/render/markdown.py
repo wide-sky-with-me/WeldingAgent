@@ -26,16 +26,11 @@ def render_pwps_draft(state: PWPSState) -> str:
     ]
 
     for index, section in enumerate(["A", "B", "C", "D", "E"], start=1):
-        lines.append(f"## {index}. {SECTION_TITLES[section]}")
-        lines.append("")
-        lines.append("| 字段 | 值 | 状态 | 说明 |")
-        lines.append("|---|---|---|---|")
-        for field_id, _label in FIELD_DEFINITIONS[section]:
-            field = state.fields[field_id]
-            value = "待确认" if field.value in (None, "") else str(field.value)
-            note = field.note or ""
-            lines.append(f"| {field.label} | {value} | `{field.status}` | {note} |")
-        lines.append("")
+        section_payload = state.sections.get(section)
+        if section_payload:
+            lines.extend(_render_structured_section(index, section, section_payload))
+        else:
+            lines.extend(_render_state_section(index, section, state))
 
     lines.append("## 6. 待确认项与风险提示")
     lines.append("")
@@ -51,6 +46,49 @@ def render_pwps_draft(state: PWPSState) -> str:
             lines.append(f"- `{field.field_id}` {field.label}: {field.status}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _render_structured_section(index: int, section: str, payload: object) -> list[str]:
+    section_payload = payload if isinstance(payload, dict) else {}
+    lines = [
+        f"## {index}. {section_payload.get('title') or SECTION_TITLES[section]}",
+        "",
+        "| 字段 | 值 | 状态 | 说明 |",
+        "|---|---|---|---|",
+    ]
+    for item in section_payload.get("fields", []):
+        if not isinstance(item, dict):
+            continue
+        note_parts = [f"confidence={item.get('confidence', 'unknown')}"]
+        evidence_ids = item.get("evidence_ids") or []
+        if evidence_ids:
+            note_parts.append(f"evidence={','.join(evidence_ids)}")
+        if item.get("note"):
+            note_parts.append(str(item["note"]))
+        lines.append(
+            f"| {item.get('label', item.get('field_id', ''))} | "
+            f"{item.get('value', '待确认')} | "
+            f"`{item.get('status', 'missing')}` | "
+            f"{'; '.join(note_parts)} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _render_state_section(index: int, section: str, state: PWPSState) -> list[str]:
+    lines = [
+        f"## {index}. {SECTION_TITLES[section]}",
+        "",
+        "| 字段 | 值 | 状态 | 说明 |",
+        "|---|---|---|---|",
+    ]
+    for field_id, _label in FIELD_DEFINITIONS[section]:
+        field = state.fields[field_id]
+        value = "待确认" if field.value in (None, "") else str(field.value)
+        note = field.note or ""
+        lines.append(f"| {field.label} | {value} | `{field.status}` | {note} |")
+    lines.append("")
+    return lines
 
 
 def render_field_report(state: PWPSState) -> dict[str, Any]:

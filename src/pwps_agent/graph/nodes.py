@@ -12,6 +12,8 @@ from pwps_agent.storage.persist import persist_run_artifacts
 from pwps_agent.tools.evidence import search_results_to_evidence
 from pwps_agent.tools.field_reasoning import apply_field_candidates, infer_candidates_from_evidence
 from pwps_agent.tools.local_doc_search import search_local_documents
+from pwps_agent.tools.risk_report import generate_risk_report
+from pwps_agent.tools.section_generation import generate_sections
 from pwps_agent.workflows.auto_draft import _merge_state_patch
 
 
@@ -245,8 +247,28 @@ def call_tool_node(graph_state: GraphState) -> dict:
 def compose_draft_node(graph_state: GraphState) -> dict:
     state = graph_state["pwps_state"].model_copy(deep=True)
     context = graph_state["context"]
+    if not state.sections:
+        sections_result = generate_sections(state)
+        state = _merge_state_patch(state, sections_result.state_patch)
+        _append_trace(
+            state,
+            "section_generation",
+            "tool_result",
+            sections_result.summary,
+            {"success": sections_result.success},
+        )
+    if not state.field_report:
+        report_result = generate_risk_report(state)
+        state = _merge_state_patch(state, report_result.state_patch)
+        _append_trace(
+            state,
+            "risk_report",
+            "tool_result",
+            report_result.summary,
+            {"success": report_result.success},
+        )
     draft = render_pwps_draft(state)
-    report = render_field_report(state)
+    report = state.field_report or render_field_report(state)
     state.draft_markdown = draft
     state.field_report = report
     run_dir = context.settings.paths.output_dir / state.run_id
@@ -259,6 +281,22 @@ def compose_draft_node(graph_state: GraphState) -> dict:
     )
     persist_run_artifacts(state, draft, report, context.settings.paths.output_dir)
     _finalize_runtime_node(state, context, "compose_draft")
+    return {"pwps_state": state}
+
+
+def generate_report_node(graph_state: GraphState) -> dict:
+    state = graph_state["pwps_state"].model_copy(deep=True)
+    context = graph_state["context"]
+    result = generate_risk_report(state)
+    state = _merge_state_patch(state, result.state_patch)
+    _append_trace(
+        state,
+        "risk_report",
+        "tool_result",
+        result.summary,
+        {"success": result.success},
+    )
+    _finalize_runtime_node(state, context, "risk_report")
     return {"pwps_state": state}
 
 

@@ -182,6 +182,8 @@ def test_auto_draft_graph_executes_tool_sequence_and_persists_artifacts(tmp_path
         "supervisor",
         "field_reasoning",
         "supervisor",
+        "section_generation",
+        "risk_report",
         "compose_draft",
         "supervisor",
         "finish",
@@ -222,6 +224,10 @@ def test_run_graph_auto_draft_service_invokes_graph_and_persists_artifacts(tmp_p
         entry["node"] == "supervisor" and entry["event_type"] == "agent_action"
         for entry in result.state.trace
     )
+    assert any(entry["node"] == "section_generation" for entry in result.state.trace)
+    assert any(entry["node"] == "risk_report" for entry in result.state.trace)
+    assert result.state.sections
+    assert result.state.field_report["summary"]["risk_count"] >= 0
 
 
 def test_run_graph_auto_draft_can_use_llm_supervisor_planner_from_settings(tmp_path: Path):
