@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pwps_agent.config import Settings
-from pwps_agent.core.contracts import AgentAction
+from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
 from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
 from pwps_agent.graph.state import GraphRuntimeContext
@@ -39,6 +39,81 @@ class PlannerReturningUnsupportedSkill:
         )
 
 
+class StaticRequirementTool:
+    def __call__(self, state, client):
+        return ToolResult(
+            tool_name="requirement_understanding",
+            success=True,
+            state_patch={
+                "core_fields": {
+                    "base_material": "Q355B",
+                    "thickness": "12mm",
+                    "welding_process": "GMAW",
+                },
+                "fields": {
+                    "base_material": {"value": "Q355B", "status": "filled"},
+                    "thickness": {"value": "12mm", "status": "filled"},
+                    "welding_process": {"value": "GMAW", "status": "filled"},
+                },
+            },
+            summary="understood requirement",
+        )
+
+
+class StaticPlanningTool:
+    def __call__(self, state, client):
+        return ToolResult(
+            tool_name="knowledge_planning",
+            success=True,
+            state_patch={
+                "knowledge_queries": [
+                    {
+                        "query_id": "kq_001",
+                        "purpose": "similar_case",
+                        "query_text": "Q355B 12mm GMAW WPS shielding gas",
+                        "target_fields": ["shielding_gas"],
+                        "rationale": "Find similar gas references.",
+                        "preferred_sources": ["web"],
+                    }
+                ]
+            },
+            summary="planned query",
+        )
+
+
+class StaticSearchProvider:
+    def search(self, query: str, query_id: str):
+        return [
+            SearchResult(
+                result_id="r1",
+                query_id=query_id,
+                provider="tavily",
+                title="WPS example",
+                url="https://example.test/wps",
+                snippet="Ar+CO2 shielding gas appears in a comparable GMAW WPS.",
+            )
+        ]
+
+
+class StaticReasoningTool:
+    def __call__(self, state, evidence, client):
+        return ToolResult(
+            tool_name="field_reasoning",
+            success=True,
+            state_patch={
+                "fields": {
+                    "shielding_gas": {
+                        "value": "Ar+CO2",
+                        "status": "candidate",
+                        "confidence": "medium",
+                        "evidence_ids": ["ev_r1"],
+                    }
+                }
+            },
+            summary="reasoned field",
+        )
+
+
 class PlannerSelectingSkillThenFinish:
     def plan_next_action(self, state):
         if "pwps_risk_review" not in state.active_domain_skills:
@@ -53,6 +128,16 @@ class PlannerSelectingSkillThenFinish:
             rationale_summary="Skill selection was recorded.",
             expected_state_change="Finish skill route test.",
             stop_reason="skill_route_test_complete",
+        )
+
+
+class PlannerRepeatingCompletedRequirementTool:
+    def plan_next_action(self, state):
+        return AgentAction(
+            action_type="CALL_TOOL",
+            tool_name="requirement_understanding",
+            rationale_summary="Repeat requirement extraction even after it completed.",
+            expected_state_change="This should be guarded by the graph supervisor.",
         )
 
 
@@ -195,6 +280,45 @@ def test_graph_routes_use_domain_skill_back_to_supervisor(tmp_path: Path):
         "supervisor",
         "finish",
     ]
+
+
+def test_graph_overrides_repeated_completed_llm_tool_action(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=StaticReasoningTool(),
+    )
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="repeat_tool_guard",
+    )
+
+    result = build_auto_draft_graph().invoke(
+        {
+            "pwps_state": state,
+            "context": GraphRuntimeContext(
+                settings=settings,
+                dependencies=dependencies,
+                supervisor_planner=PlannerRepeatingCompletedRequirementTool(),
+                supervisor_planner_mode="llm",
+            ),
+        }
+    )
+
+    final_state = result["pwps_state"]
+    assert final_state.status == "done"
+    assert [entry["node"] for entry in final_state.trace].count("requirement_understanding") == 1
+    assert any(
+        entry["node"] == "supervisor"
+        and entry["event_type"] == "agent_action_overridden"
+        and entry["payload"]["requested_tool_name"] == "requirement_understanding"
+        for entry in final_state.trace
+    )
 
 
 def test_supervisor_node_rejects_unknown_domain_skill(tmp_path: Path):

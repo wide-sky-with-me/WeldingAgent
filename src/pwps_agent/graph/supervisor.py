@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Protocol
 
 from pwps_agent.agent.prompt_loader import load_domain_skill, load_domain_skill_bundle
@@ -23,6 +24,8 @@ AVAILABLE_GRAPH_TOOLS = [
     "web_search",
     "field_reasoning",
 ]
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SupervisorPlanner(Protocol):
@@ -133,8 +136,43 @@ def supervisor_node(graph_state: GraphState) -> dict:
             }
         )
         return {"pwps_state": state}
+    override_action = _override_repeated_completed_action(state, action)
+    if override_action is not None:
+        state.trace.append(
+            {
+                "step": len(state.trace) + 1,
+                "node": "supervisor",
+                "event_type": "agent_action_overridden",
+                "summary": "Planner requested an already completed action; using deterministic next action.",
+                "payload": {
+                    "planner": planner_mode,
+                    "requested_action_type": action.action_type,
+                    "requested_tool_name": action.tool_name,
+                    "requested_domain_skill_name": action.domain_skill_name,
+                    "replacement_action_type": override_action.action_type,
+                    "replacement_tool_name": override_action.tool_name,
+                },
+            }
+        )
+        LOGGER.warning(
+            "Overrode repeated completed planner action planner=%s requested=%s tool=%s replacement=%s tool=%s",
+            planner_mode,
+            action.action_type,
+            action.tool_name,
+            override_action.action_type,
+            override_action.tool_name,
+        )
+        action = override_action
     state.pending_action = action
     state.actions.append(action)
+    LOGGER.info(
+        "Supervisor selected action=%s tool=%s skill=%s planner=%s run_id=%s",
+        action.action_type,
+        action.tool_name,
+        action.domain_skill_name,
+        planner_mode,
+        state.run_id,
+    )
     state.trace.append(
         {
             "step": len(state.trace) + 1,
@@ -178,6 +216,33 @@ def _validate_action(action: AgentAction) -> str | None:
     }:
         return f"Unsupported graph action: {action.action_type}"
     return None
+
+
+def _override_repeated_completed_action(
+    state: PWPSState,
+    action: AgentAction,
+) -> AgentAction | None:
+    if action.action_type == "CALL_TOOL" and action.tool_name:
+        if _node_completed(state, action.tool_name):
+            return plan_next_auto_draft_action(state)
+    if action.action_type == "USE_DOMAIN_SKILL" and action.domain_skill_name:
+        if action.domain_skill_name in state.active_domain_skills:
+            return plan_next_auto_draft_action(state)
+    if action.action_type == "UPDATE_STATE":
+        if action.tool_args.get("operation") == "supplement_update" and _node_completed(
+            state,
+            "supplement_update",
+        ):
+            return plan_next_auto_draft_action(state)
+    if action.action_type == "COMPOSE_DRAFT" and _node_completed(state, "compose_draft"):
+        return plan_next_auto_draft_action(state)
+    if action.action_type == "GENERATE_REPORT" and _node_completed(state, "risk_report"):
+        return plan_next_auto_draft_action(state)
+    return None
+
+
+def _node_completed(state: PWPSState, node: str) -> bool:
+    return any(entry.get("node") == node for entry in state.trace)
 
 
 def plan_next_auto_draft_action(state: PWPSState) -> AgentAction:

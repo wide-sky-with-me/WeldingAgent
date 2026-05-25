@@ -81,6 +81,8 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 - `pwps-agent auto-draft` now routes through the graph-backed `run_graph_auto_draft()` service by default; the older linear `run_auto_draft()` remains available for compatibility and legacy workflow tests.
 - The graph Supervisor now has an injectable planner seam and runtime config: deterministic auto-draft planning remains the default, while `SUPERVISOR_PLANNER=llm` injects `LLMSupervisorPlanner` to request structured `AgentAction` output from an LLM with Domain Skill context.
 - Supervisor action trace now records planner mode, and unsupported LLM-selected graph actions/tools are rejected before routing with failed-state finish behavior.
+- LLM Supervisor planning now has loop protection for repeated completed actions: if the model requests a tool, domain skill, report, or draft step that is already complete, the Supervisor records an override trace event and advances through the deterministic next action instead of relying on LangGraph's recursion limit.
+- CLI auto-draft now emits structured runtime logs to stderr for run start, graph construction, Supervisor actions, tool events, overrides, and completion; the known upstream LangGraph/LangChain `allowed_objects` pending-deprecation warning is narrowly filtered at package import.
 - `USE_DOMAIN_SKILL` is now a graph action: active domain skills and skill-use history are stored in `PWPSState`, requested skill names are validated through the prompt loader, selections are traceable, and active skill context is injected into later LLM Supervisor prompts.
 - The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
 - Web search execution in the graph supports multiple planned queries through a bounded thread pool, per-query timeout handling, partial-success trace records, and per-query error/timeout trace events.
@@ -104,6 +106,27 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 Recent verification:
 
 ```text
+uv run pytest tests/test_graph_supervisor_planner.py::test_graph_overrides_repeated_completed_llm_tool_action -q
+1 passed
+
+uv run pytest tests/test_cli.py::test_cli_auto_draft_emits_progress_logs -q
+1 passed
+
+uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-fix-smoke --run-id demo_auto_fix
+/tmp/pwps-agent-fix-smoke/demo_auto_fix
+
+uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
+27 passed
+
+uv run pytest -q
+99 passed
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_section_generation.py tests/test_risk_report.py tests/test_render.py -q
 8 passed
 

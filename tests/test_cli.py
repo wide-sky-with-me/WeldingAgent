@@ -265,6 +265,30 @@ def test_cli_auto_draft_uses_graph_runtime_by_default(monkeypatch, tmp_path: Pat
     }
 
 
+def test_cli_auto_draft_emits_progress_logs(monkeypatch, tmp_path: Path, capsys) -> None:
+    def fake_run_graph_auto_draft(requirement, settings, run_id):
+        state = create_initial_state(requirement, "auto_draft", run_id=run_id)
+        return AutoDraftResult(state=state, output_dir=str(tmp_path / run_id))
+
+    monkeypatch.setattr("pwps_agent.cli.run_graph_auto_draft", fake_run_graph_auto_draft, raising=False)
+
+    exit_code = main(
+        [
+            "auto-draft",
+            "Q355B 12mm GMAW pWPS",
+            "--output-dir",
+            str(tmp_path),
+            "--run-id",
+            "cli_logs",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Starting auto-draft run_id=cli_logs" in captured.err
+    assert "Completed auto-draft run_id=cli_logs" in captured.err
+
+
 def test_cli_reports_runtime_failure_without_traceback(monkeypatch, capsys) -> None:
     def failing_run_graph_auto_draft(*args, **kwargs):
         raise RuntimeError("provider timeout")

@@ -10,6 +10,8 @@
 
 **Status:** Completed. The graph supervisor now has an injectable planner seam, keeps deterministic auto-draft planning as the default, and includes an LLM-backed planner that requests structured `AgentAction` output with Domain Skill context.
 
+**Stability update 2026-05-25:** Live `SUPERVISOR_PLANNER=llm` smoke exposed that an LLM planner can repeatedly request already completed tool actions, causing LangGraph's recursion limit to stop the run. The Supervisor now detects repeated completed actions, records an `agent_action_overridden` trace event, and advances through the deterministic next action. CLI auto-draft also emits runtime logs to stderr, and the known upstream LangGraph/LangChain `allowed_objects` pending-deprecation warning is narrowly filtered.
+
 ---
 
 ### Task 1: Planner Injection Tests
@@ -38,6 +40,27 @@
 Verification:
 
 ```text
+uv run pytest tests/test_graph_supervisor_planner.py::test_graph_overrides_repeated_completed_llm_tool_action -q
+1 passed
+
+uv run pytest tests/test_cli.py::test_cli_auto_draft_emits_progress_logs -q
+1 passed
+
+uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-fix-smoke --run-id demo_auto_fix
+/tmp/pwps-agent-fix-smoke/demo_auto_fix
+
+uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
+27 passed
+
+uv run pytest -q
+99 passed
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
 uv run pytest tests/test_graph_supervisor_planner.py -v
 2 passed, 1 warning
 

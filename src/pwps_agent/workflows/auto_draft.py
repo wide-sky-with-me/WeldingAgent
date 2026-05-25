@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -23,6 +24,8 @@ from pwps_agent.tools.field_reasoning import (
 from pwps_agent.tools.knowledge_planning import plan_knowledge_queries
 from pwps_agent.tools.local_doc_search import search_local_documents
 from pwps_agent.tools.requirement_understanding import understand_requirement
+
+LOGGER = logging.getLogger(__name__)
 
 
 class RequirementTool(Protocol):
@@ -168,6 +171,12 @@ def run_graph_auto_draft(
     from pwps_agent.graph.supervisor import LLMSupervisorPlanner
 
     deps = dependencies or _build_dependencies(settings)
+    LOGGER.info(
+        "Building graph auto-draft run_id=%s planner=%s output_dir=%s",
+        run_id,
+        settings.supervisor.planner,
+        settings.paths.output_dir,
+    )
     supervisor_planner = None
     if settings.supervisor.planner == "llm":
         supervisor_planner = LLMSupervisorPlanner(client=deps.llm_client)
@@ -185,6 +194,12 @@ def run_graph_auto_draft(
         }
     )
     final_state = result["pwps_state"]
+    LOGGER.info(
+        "Graph auto-draft finished run_id=%s status=%s steps=%s",
+        final_state.run_id,
+        final_state.status,
+        final_state.step_count,
+    )
     return AutoDraftResult(
         state=final_state,
         output_dir=str(settings.paths.output_dir / final_state.run_id),

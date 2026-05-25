@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from pwps_agent.agent.prompt_loader import load_domain_skill
@@ -15,6 +16,8 @@ from pwps_agent.tools.local_doc_search import search_local_documents
 from pwps_agent.tools.risk_report import generate_risk_report
 from pwps_agent.tools.section_generation import generate_sections
 from pwps_agent.workflows.auto_draft import _merge_state_patch
+
+LOGGER = logging.getLogger(__name__)
 
 
 def use_domain_skill_node(graph_state: GraphState) -> dict:
@@ -333,6 +336,14 @@ def finish_node(graph_state: GraphState) -> dict:
 
 
 def _append_trace(state, node: str, event_type: str, summary: str, payload: dict) -> None:
+    LOGGER.info(
+        "Graph event run_id=%s step=%s node=%s event=%s summary=%s",
+        state.run_id,
+        len(state.trace) + 1,
+        node,
+        event_type,
+        summary,
+    )
     state.trace.append(
         {
             "step": len(state.trace) + 1,

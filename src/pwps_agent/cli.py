@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from pwps_agent.workflows.supplement_update import (
     resume_supplement_update_from_checkpoint,
 )
 from pwps_agent.workflows.auto_draft import run_graph_auto_draft
+
+LOGGER = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -88,6 +92,12 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_settings()
         if args.output_dir is not None:
             settings.paths.output_dir = args.output_dir
+        LOGGER.info(
+            "Starting auto-draft run_id=%s planner=%s output_dir=%s",
+            args.run_id,
+            settings.supervisor.planner,
+            settings.paths.output_dir,
+        )
         try:
             result = run_graph_auto_draft(
                 args.requirement,
@@ -95,8 +105,15 @@ def main(argv: list[str] | None = None) -> int:
                 run_id=args.run_id,
             )
         except Exception as exc:
+            LOGGER.error("Auto-draft failed run_id=%s error=%s", args.run_id, exc)
             print(f"pwps-agent: {exc}", file=sys.stderr)
             return 1
+        LOGGER.info(
+            "Completed auto-draft run_id=%s status=%s output_dir=%s",
+            args.run_id,
+            result.state.status,
+            result.output_dir,
+        )
         print(result.output_dir)
         return 0
 
@@ -257,6 +274,15 @@ def _parse_set_values(values: list[str]) -> dict[str, str]:
     if not parsed:
         raise ValueError("At least one --set field=value is required.")
     return parsed
+
+
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+        force=True,
+    )
 
 
 if __name__ == "__main__":
