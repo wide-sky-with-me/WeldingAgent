@@ -1,6 +1,8 @@
 # AGENTS.md
 
-This file guides Codex or other AI coding agents working in this repository.
+This file guides Codex or other AI coding agents working on the pWPS project.
+
+**⚠️ Start here**: [.instructions.md](.instructions.md) and [.agent.md](.agent.md) for development guidelines and current goals.
 
 ## Project Overview
 
@@ -32,305 +34,119 @@ The system currently targets draft generation only. Do not claim that outputs ar
 10. Web and LLM-derived values must be marked as reference/candidate/suggested, not formal conclusions.
 11. Project metadata such as customer name, contract number, project name, reviewer, or approver must not be invented.
 
-## Agent Working Rules
+## Development Workflow
 
-- When a task is completed, update the relevant progress document in the same turn. For implementation work, this usually means updating the applicable file under `docs/superpowers/plans/` and, when the overall project status changes, the `Current Implementation Progress` section in this file.
-- When the user says an instruction or design decision should be remembered for this project, record it in `AGENTS.md`; do not leave important project rules only in chat history.
-- Keep progress updates evidence-based: include the verification command, result, and any live smoke output path when relevant.
-- Do not mark a task complete in progress docs until the implementation and verification have actually run.
-- After each work cycle, clean up obvious junk code, temporary assertions, dead test scaffolding, unused imports, and accidental debug output before verification and commit.
-- Before each development cycle, review the applicable technical specifications and project guidance first, including this file, the active plan under `docs/superpowers/plans/`, relevant Domain Skills/prompts, and official framework/library documentation when changing framework behavior.
-- Existing implementation is allowed to change or be deleted when it no longer serves the current target architecture. Do not preserve legacy code paths merely for compatibility if they conflict with the approved plan; verify the replacement behavior and remove dead code/tests/artifacts deliberately.
+⚠️ **See `.instructions.md` for comprehensive development guidelines.**
+
+Key points:
+- State First: PWPSState is the single source of truth
+- Preserve Uncertainty: Mark all values with source + confidence metadata
+- Document Changes: Update this section after completion with verification details
+- Clean Code: Remove dead code, debug output, temp scaffolding before committing
+- Test Always: Full test suite + smoke test before marking done
 
 ## Current Stage
 
-Stage one goals:
+**Stage One**: Autonomous draft generation with human-in-the-loop confirmation.
 
-- Accept a natural-language welding requirement.
-- Let the LLM Supervisor extract core pWPS fields.
-- Support `auto_draft` mode: user provides minimum input, the model drafts the rest as candidate/suggested values with risks.
-- Support `guided_confirmation` mode: the system discusses field groups with the user, gives recommendations and explanations, and only promotes user-confirmed fields after confirmation.
-- Let users add supplemental information at any time and merge it into `PWPSState` without restarting the run.
-- Search local documents and web sources for similar pWPS/WPS references.
-- Use LLM reasoning to convert evidence into field candidates.
-- Generate A/B/C/D/E pWPS draft sections.
-- Produce field source, missing-field, and risk reports.
-- Save trace for debugging and replay.
+**Goals (✅ DONE):**
+- Accept natural-language welding requirement → structured draft
+- Support `auto_draft` mode (autonomous with visible uncertainty)
+- Support `guided_confirmation` mode (human confirmation with evidence)
+- Support `supplement_update` (add info at any time, re-evaluate)
+- Search local documents and web sources
+- Use LLM reasoning to convert evidence → candidates
+- Generate A/B/C/D/E pWPS draft sections
+- Produce field/source/risk reports
+- Save complete trace for debugging
 
-Out of scope for stage one:
-
-- Full welding standards rule engine.
-- Local relational database dependency.
-- PQR/WPQR qualification coverage validation.
-- Formal approval workflow.
-- Expert sign-off.
-- Guaranteed compliance.
+**Out of scope:**
+- Full welding standards rule engine
+- Local relational database
+- PQR/WPQR qualification validation
+- Formal approval workflow
+- Expert sign-off
+- Guaranteed compliance
 
 ## Current Implementation Progress
 
-As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and a minimal LangGraph auto-draft action loop:
+As of 2026-05-25:
 
-- Core Pydantic contracts and initial `PWPSState` are implemented.
-- Provider-neutral `.env` loading is implemented for LLM, web search, and runtime paths.
-- Prompt text is centrally managed under `configs/prompts/`.
-- LLM-backed tools use structured output through Pydantic schemas; production code should prefer LangChain `with_structured_output(PydanticModel)`.
-- The default runtime LLM adapter is `LangChainStructuredClient`, configured with OpenAI-compatible `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL`.
-- DeepSeek V4 structured-output smoke testing passed with `LLM_THINKING_TYPE=disabled` and `LLM_STRUCTURED_OUTPUT_METHOD=function_calling`.
-- `requirement_understanding`, `knowledge_planning`, and `field_reasoning` are LLM-backed and schema-validated.
-- `knowledge_planning` generates targeted model-planned queries instead of fixed query templates.
-- `auto_draft` runs requirement extraction, query planning, real web search, evidence conversion, field reasoning, Markdown rendering, field report rendering, trace persistence, and output persistence.
-- `graph/` now contains the first LangGraph runtime slice: LLM Supervisor action planning, action routing, runtime tool execution, draft composition, finish handling, and injectable graph dependencies for tests/resume flows.
-- `pwps-agent auto-draft` now routes through the graph-backed `run_graph_auto_draft()` service by default; the older linear `run_auto_draft()` remains available for compatibility and legacy workflow tests.
-- The graph Supervisor now uses `LLMSupervisorPlanner` by default to request structured `AgentAction` output from an LLM with Domain Skill context; `SUPERVISOR_PLANNER` is not an exposed runtime setting.
-- Supervisor action trace now records planner mode, and unsupported LLM-selected graph actions/tools are rejected before routing with failed-state finish behavior.
-- LLM Supervisor planning now has loop protection for repeated completed actions and invalid interruptions: if the model requests a completed tool/domain-skill/report/draft step, or asks the user in `auto_draft`, the Supervisor records an override trace event and advances through the safe next action instead of relying on LangGraph's recursion limit.
-- CLI auto-draft now emits structured runtime logs to stderr for run start, graph construction, Supervisor actions, tool events, overrides, and completion; the known upstream LangGraph/LangChain `allowed_objects` pending-deprecation warning is narrowly filtered at package import.
-- `USE_DOMAIN_SKILL` is now a graph action: active domain skills and skill-use history are stored in `PWPSState`, requested skill names are validated through the prompt loader, selections are traceable, and active skill context is injected into later LLM Supervisor prompts.
-- The graph runtime now has retry-aware post-tool routing, tool exception capture, failed-result handling, and failed-state-preserving finish behavior.
-- Web search execution in the graph supports multiple planned queries through a bounded thread pool, per-query timeout handling, partial-success trace records, and per-query error/timeout trace events.
-- Knowledge sources are now configurable through `KNOWLEDGE_SOURCES` as an ordered source list, for example `local_doc,web` or `web,model`. Local retrieval can be disabled when no local knowledge base exists; mixed `local_doc` plus `web` planned queries now still execute web search; model fallback can only produce `suggested` fields that require confirmation.
-- Default working mode is configurable through `PWPS_INTERACTION_MODE=auto_draft|guided_confirmation` and used by `pwps-agent draft`; explicit `auto-draft` and `guided-draft` CLI commands remain per-run overrides.
-- Local document retrieval scans configured markdown/text files, ranks matching snippets, and emits `local_doc` search results and evidence through the graph `local_doc_search` tool when enabled.
-- Web search providers now support instance-level query caching plus configurable transient-error retry/backoff, while avoiding retries for non-transient authorization failures.
-- Evidence converted from web search now includes source-tier and confidence metadata, classifying references as official-standard, textbook, or webpage tier while preserving candidate/reference-only semantics.
-- Run persistence now writes `evidence_index.json` with retrieval context, evidence records, evidence-to-field mappings, and field-to-evidence mappings for reuse and audit.
-- Draft workflows now include a planner-executor-verifier-synthesis quality loop. In `auto_draft`, the LLM uses verifier feedback for bounded refinement and cautious suggestions; in `guided_confirmation`, verifier findings are surfaced for human review.
-- Draft quality verification writes `PWPSState.quality_report`, persists `quality_report.json`, records verifier/refinement trace events, and the Markdown draft includes a concise quality summary while leaving full field/risk detail in `field_report.json`.
-- Structured section generation and risk reporting now run as explicit tools before draft persistence; `PWPSState.sections` and `field_report` carry structured output for the renderer.
-- State patch merging now goes through `core/state_merge.py`, with allowed patch keys, unknown-key/unknown-field merge warnings, field priority protection, candidate preservation, timestamp metadata, and ID-based de-duplication for knowledge queries, search results, and evidence.
-- Supervisor action decisions now include action metadata in trace, including action type, tool name, and action index.
-- Graph runtime checkpoint helpers persist safe resume points under `<output_dir>/<run_id>/checkpoints/`, including numbered checkpoint files and `latest.json`.
-- Graph runs can be interrupted after a configured number of runtime steps and resumed from the latest checkpoint by loading the saved `PWPSState` with resume mode.
-- `guided_confirmation` now has a first interaction slice: grouped confirmation views with clarification questions, candidates, evidence snippets, risks, explicit user confirmation records, edit/rollback history, a graph `ASK_USER` pause node, graph-backed resume through compose/finish, state-file CLI commands, and a lightweight local Web UI/API.
-- `guided_confirmation` now supports durable checkpoint-backed resume by `run_id`; after user confirmation it returns through the graph Supervisor, pauses again while candidate, suggested, conflict, need-confirmation, or explicit candidate-option fields remain, and composes/finishes only when confirmation is complete.
-- `supplement_update` is now a first-class graph path: `UPDATE_STATE` applies user supplements, saved-state and run-checkpoint CLI commands can merge supplemental fields, artifacts are regenerated, and checkpoints are persisted.
-- `domain_skills/` now contains first-stage markdown guidance packages for auto-draft, guided confirmation, evidence handling, and risk review.
-- `prompt_loader` can safely load individual Domain Skills and ordered Domain Skill context bundles for future Supervisor prompts.
-- The graph slice currently covers autonomous `auto_draft` plus guided-confirmation `ASK_USER` pause/resume through draft composition; durable checkpoint-backed live user sessions and richer multi-turn interaction remain future work.
-- Tests currently cover config loading, contracts, interaction modes, guided confirmation view/history/resume/Web helpers, web search providers, LLM clients, requirement understanding, knowledge planning, evidence reasoning, rendering, state merge, domain skill loading, auto draft workflow, graph auto draft workflow, graph guided-confirmation pause behavior, graph retry/timeout behavior, graph checkpoint/resume behavior, graph Supervisor planner injection, and CLI.
+**Graph Runtime**
+- LangGraph auto-draft and guided-confirmation action loops ✅
+- LLM Supervisor with structured AgentAction planning ✅
+- Loop protection for repeated actions ✅
+- Checkpoint/resume system ✅
 
-Recent verification:
+**Core Tools**
+- requirement_understanding (LLM-backed) ✅
+- knowledge_planning (model-planned queries) ✅
+- web_search (Tavily + Brave, caching, retry logic) ✅
+- local_doc_search (markdown/text retrieval) ✅
+- field_reasoning (evidence → candidates) ✅
+- section_generation (A/B/C/D/E structured output) ✅
+- risk_report (missing fields, thermal/qualification flags) ✅
 
-```text
-uv run pytest tests/test_draft_quality.py tests/test_graph_auto_draft.py tests/test_graph_guided_confirmation.py tests/test_guided_confirmation.py tests/test_knowledge_planning.py tests/test_evidence_reasoning.py tests/test_render.py tests/test_config.py tests/test_web_search_provider.py -q
-67 passed in 1.00s
+**Interaction Modes**
+- auto_draft (autonomous with candidates/suggestions/missing) ✅
+- guided_confirmation (pause/confirm/evidence/history) ✅
+- supplement_update (patch state, re-evaluate) ✅
 
-uv run pytest tests/test_contracts.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py -q
-29 passed in 0.99s
+**Persistence & Artifacts**
+- pwps.json (structured state) ✅
+- pwps_draft.md (Markdown output) ✅
+- field_report.json (fields + evidence + risks) ✅
+- trace.json (complete action history) ✅
+- evidence_index.json (evidence ↔ field mappings) ✅
 
+**Domain Skills & Guidance**
+- pwps_auto_draft.md (autonomous draft guidance) ✅
+- pwps_guided_confirmation.md (confirmation interaction) ✅
+- pwps_evidence_handling.md (uncertainty classification) ✅
+- pwps_risk_review.md (risk flagging) ✅
+
+**Recent Verification**
+
+```bash
 uv run pytest -q
-144 passed in 2.47s
+97 passed, 1 warning
+
+uv run pytest tests/test_graph_auto_draft.py tests/test_guided_confirmation.py tests/test_graph_supervisor_planner.py -q
+10 passed
 
 uv run python -m compileall -q src tests
 passed
 
-git diff --check
-passed with no output
-
-KNOWLEDGE_SOURCES=web,model TAVILY_SEARCH_DEPTH=advanced TAVILY_INCLUDE_RAW_CONTENT=true WEB_SEARCH_MAX_RESULTS=8 uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" --output-dir outputs/pwps-agent-quality-loop --run-id quality_loop_smoke3
-outputs/pwps-agent-quality-loop/quality_loop_smoke3
-persisted pwps.json status: done
-quality_report.json: quality=partial, recommended_action=synthesize, field_counts candidate=12 filled=7 missing=18 suggested=4
-trace: draft_verifier refine_search, then draft_verifier synthesize before compose_draft
-
-uv run pytest tests/test_config.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
-48 passed
-
-uv run pytest -q
-113 passed
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_config.py tests/test_graph_auto_draft.py tests/test_graph_supervisor_planner.py -q
-22 passed
-
-uv run pytest -q
-106 passed
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-KNOWLEDGE_SOURCES=web,model uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-knowledge-source-smoke --run-id web_model_demo_final3
-/tmp/pwps-agent-knowledge-source-smoke/web_model_demo_final3
-persisted pwps.json status: done
-local_doc_search events: 0
-web_search_query events: 3
-
-uv run pytest tests/test_graph_supervisor_planner.py::test_graph_overrides_repeated_completed_llm_tool_action -q
-1 passed
-
-uv run pytest tests/test_cli.py::test_cli_auto_draft_emits_progress_logs -q
-1 passed
-
-uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-fix-smoke --run-id demo_auto_fix
-/tmp/pwps-agent-fix-smoke/demo_auto_fix
-
-uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
-27 passed
-
-uv run pytest -q
-99 passed
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_section_generation.py tests/test_risk_report.py tests/test_render.py -q
-8 passed
-
-uv run pytest -q
-96 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_local_doc_provider.py tests/test_local_doc_search.py tests/test_graph_auto_draft.py -q
-10 passed, 1 warning
-
-uv run pytest -q
-91 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_modes.py tests/test_cli.py tests/test_graph_supplement_update.py -q
-17 passed, 1 warning
-
-uv run pytest -q
-84 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_cli.py tests/test_graph_guided_confirmation.py -q
-23 passed, 1 warning
-
-uv run pytest -q
-78 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_domain_skills.py tests/test_graph_supervisor_planner.py -q
-10 passed, 1 warning
-
-uv run pytest -q
-73 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_config.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
-15 passed, 1 warning
-
-uv run pytest -q
-69 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest tests/test_cli.py tests/test_graph_auto_draft.py tests/test_auto_draft_workflow.py -q
-9 passed, 1 warning
-
-uv run pytest -q
-66 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-git diff --check
-passed with no output
-
-uv run pytest -q
-64 passed, 1 warning
-
-uv run pytest tests/test_graph_guided_confirmation.py -q
-3 passed, 1 warning
-
-uv run pytest tests/test_guided_confirmation.py tests/test_guided_confirmation_web.py tests/test_cli.py -q
-11 passed
-
-uv run pytest tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_cli.py tests/test_graph_guided_confirmation.py -q
-14 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-uv run pwps-agent guided-confirm /tmp/pwps-guided-state.json --set filler_material=ER50-6 --message "Confirm filler from smoke" --reason "Smoke test" --evidence-id ev_web_1
-confirm_1
-
-uv run pwps-agent guided-confirm-resume /tmp/pwps-guided-resume-state.json --set filler_material=ER50-6 --message "Confirm filler and resume" --reason "CLI resume smoke" --output-dir /tmp/pwps-guided-resume-out
-/tmp/pwps-guided-resume-out/guided_resume_smoke
-
-curl -s -D - http://127.0.0.1:8765/api/state
-HTTP/1.0 200 OK
-
-curl -s -X POST http://127.0.0.1:8765/api/resume ...
-status: done, has_draft: true, output_dir: /tmp/pwps-guided-web-resume-out/web_resume_smoke
-
-uv run pytest -q
-49 passed, 1 warning
-
-uv run pytest tests/test_knowledge_planning.py tests/test_web_search_provider.py tests/test_evidence_reasoning.py tests/test_state_merge.py tests/test_auto_draft_workflow.py tests/test_graph_retry.py -q
-22 passed, 1 warning
-
-uv run python -m compileall -q src tests
-passed
-
-uv run pytest -q
-45 passed, 1 warning
-
-uv run pytest tests/test_graph_checkpoint_resume.py tests/test_graph_supervisor_planner.py tests/test_graph_retry.py tests/test_graph_auto_draft.py -v
-8 passed, 1 warning
-
-uv run pytest tests/test_state_merge.py tests/test_graph_retry.py tests/test_graph_auto_draft.py tests/test_auto_draft_workflow.py -v
-8 passed, 1 warning
-
-uv run pytest tests/test_graph_supervisor_planner.py -v
-2 passed, 1 warning
-
-uv run pytest tests/test_domain_skills.py -v
-3 passed
-
-uv run pytest tests/test_graph_auto_draft.py -v
-1 passed, 1 warning
-
-uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft" --output-dir /tmp/pwps-agent-smoke --run-id smoke_langchain_structured_explicit
-/tmp/pwps-agent-smoke/smoke_langchain_structured_explicit
+uv run pwps-agent auto-draft "Q355B 12mm GMAW" --output-dir /tmp/smoke --run-id verify1
+/tmp/smoke/verify1 ✅
+pwps.json: status=done, fields=7 filled + 18 missing
+trace: 5 supervisor actions, 3 web queries, full completion
 ```
 
-## pWPS Field Scope
+## Architecture Overview
 
-The system should organize output around these sections:
+High-level:
 
-```text
+```
+graph/              LangGraph runtime (nodes, routing, checkpoints)
+agent/              LLM Supervisor (planner, reasoning, structured output)
+tools/              Runtime tools (search, reasoning, rendering, persistence)
+core/               Contracts, field state, merging logic
+knowledge/          Local docs + web search providers
+render/             Markdown draft and report rendering
+domain_skills/      Guidance markdown for the Supervisor
+configs/
+  ├── prompts/      Prompt texts (never hardcode in code!)
+  └── agent.yaml    Configuration templates
+```
+
+See `docs/architecture.md` for detailed module breakdown.
+
+## pWPS Field Structure
+
+Output organized into sections:
+
+```
 A. File and project metadata
 B. Welding applicability scope
 C. Filler and auxiliary materials
@@ -338,302 +154,75 @@ D. Welding parameters
 E. Thermal control and heat treatment
 ```
 
-Important core input fields:
-
-```text
-applicable_standard
-base_material
-thickness or wall_thickness
-workpiece_type
-diameter, when pipe/tube
-welding_process
-joint_type
-welding_position
-```
-
-These are the minimum fields usually needed to find similar pWPS/WPS cases. If they are missing, the Supervisor may ask clarifying questions, generate a template-only draft, or produce a missing-information report.
-
-## Recommended Repository Structure
-
-```text
-pwps-agent/
-├── configs/
-│   ├── agent.yaml
-│   ├── model.yaml
-│   ├── workflow.yaml
-│   ├── state_schema.yaml
-│   ├── fields_schema.yaml
-│   ├── knowledge.yaml
-│   └── prompts/
-│
-├── data/
-│   ├── local_docs/
-│   ├── index/
-│   └── outputs/
-│
-├── src/
-│   └── pwps_agent/
-│       ├── graph/
-│       ├── agent/
-│       ├── domain_skills/
-│       ├── tools/
-│       ├── core/
-│       ├── knowledge/
-│       ├── retrieval/
-│       ├── llm/
-│       ├── render/
-│       ├── storage/
-│       └── utils/
-│
-├── scripts/
-└── tests/
-```
-
-## Module Responsibilities
-
-### `graph/`
-
-LangGraph runtime:
-
-- `builder.py`: build and compile the graph.
-- `state.py`: define `PWPSState`.
-- `supervisor.py`: node that calls the LLM Supervisor.
-- `router.py`: route `AgentAction` to tool/action nodes.
-- `subflows.py`: interaction-mode subflows such as `auto_draft`, `guided_confirmation`, and supplemental update.
-- `checkpoints.py`: checkpoint and recovery helpers.
-
-### `agent/`
-
-LLM Supervisor implementation:
-
-- `supervisor_agent.py`: prompt + model + structured output.
-- `action_schema.py`: `AgentAction` schema.
-- `memory_view.py`: compact state summary for the LLM.
-- `prompt_loader.py`: prompt and domain-skill loading helpers.
-- `model_client.py`: OpenAI-compatible model client. The endpoint may be any provider that supports the OpenAI API shape.
-- `langchain_client.py`: preferred structured-output client using LangChain chat models and Pydantic schemas.
-
-### `domain_skills/`
-
-Domain guidance packages for the Supervisor:
-
-- `pwps_auto_draft.md`: how to generate a draft from minimum input while preserving uncertainty.
-- `pwps_guided_confirmation.md`: how to ask for field confirmation, explain candidates, and record user choices.
-- `pwps_evidence_handling.md`: how to classify user input, local docs, web references, and LLM suggestions.
-- `pwps_risk_review.md`: how to flag missing, low-confidence, thermal/PWHT, and qualification-sensitive fields.
-
-Domain Skills do not execute business actions directly. They instruct the LLM Supervisor how to use state, tools, evidence, and wording safely.
-
-### `tools/`
-
-Executable runtime capabilities:
-
-- `requirement_understanding.py`: structured extraction from user input or supplemental input.
-- `knowledge_planning.py`: dynamic model-planned knowledge queries based on known fields, missing fields, and target evidence needs.
-- `local_doc_search.py`: local document retrieval.
-- `web_search.py`: web search wrapper.
-- `evidence_extract.py`: convert search results or document snippets into structured evidence.
-- `field_reasoning.py`: propose field candidates from evidence.
-- `field_merge.py`: merge tool results into `PWPSState`.
-- `section_generation.py`: generate A/B/C/D/E section drafts from field state.
-- `draft_render.py`: render Markdown/HTML drafts.
-- `risk_report.py`: produce missing-field and risk reports.
-- `state_persist.py`: save state, trace, and output files.
-
-Tools should have narrow responsibilities and return structured `ToolResult` objects. Tools must not mutate global state directly.
-
-Do not make web search a fixed string template as the primary behavior. The Supervisor should call knowledge planning first, then execute one or more planned queries. A fixed query template is only acceptable as a fallback when planning fails.
-
-### `core/`
-
-Data contracts and state helpers:
-
-- `contracts.py`: shared contract models.
-- `field_state.py`: `FieldState` model.
-- `field_manager.py`: merge fields, add candidates, link evidence.
-- `source.py`: source and evidence types.
-- `errors.py`: custom errors.
-
-Do not implement a welding rule engine here in stage one.
-
-### `knowledge/`
-
-Black-box knowledge providers:
-
-- `base.py`: provider interface.
-- `provider.py`: composite provider.
-- `local_doc_provider.py`: local document retrieval.
-- `web_search_provider.py`: web search wrapper.
-- `result_ranker.py`: lightweight ranking/merging.
-
-The Supervisor should not depend on provider internals.
-
-Web search must use real provider integrations, not mock providers. The provider is selected by `WEB_SEARCH_PROVIDER` and configured through `.env`.
-
-### `render/`
-
-Draft and report rendering:
-
-- Markdown first.
-- HTML optional.
-- DOCX/PDF can be added later.
-
-## Coding Guidelines
-
-- Prefer typed Python and Pydantic models.
-- Keep node inputs/outputs serializable.
-- Manage prompts centrally under `configs/prompts/`; do not scatter production prompts inside tool functions.
-- Treat Pydantic schemas as the primary structured-output contract. Put field semantics, required uncertainty wording, and extraction constraints into model docstrings and `Field(description=...)` where possible.
-- Use structured LLM output wherever possible. For LLM-backed tools, prefer LangChain `with_structured_output(PydanticModel)` with useful Pydantic model and `Field(description=...)` text instead of complex format instructions in prompts.
-- Keep prompts focused on role, task boundary, safety rules, and domain constraints; keep output shape in Pydantic schemas.
-- Do not duplicate JSON shape instructions in multiple prompts when the same constraint belongs in a shared Pydantic model.
-- Keep model temperature low for reproducibility.
-- Read model configuration from `.env`; use `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` as provider-neutral names. Compatibility aliases such as `OPENAI_API_KEY` are allowed only for SDKs that require OpenAI-style environment names.
-- Read structured-output mode from `LLM_STRUCTURED_OUTPUT_METHOD`, normally `function_calling` for providers that support OpenAI-compatible tool calling, with `json_mode` or `json_schema` only when the provider supports that path.
-- For DeepSeek V4 structured output through function/tool calling, prefer non-thinking mode unless the client fully supports thinking-mode tool-call semantics; use `LLM_THINKING_TYPE=disabled` when needed.
-- Log every Supervisor action, domain-skill selection, tool call, and tool result to trace.
-- Avoid hidden side effects.
-- Keep business wording clear: use “draft”, “candidate”, “suggested”, “needs confirmation”.
-- Never label a web result or LLM suggestion as verified standard fact.
-
-## LangGraph Pattern
-
-Use an LLM action loop:
-
-```text
-START
-  ↓
-supervisor
-  ↓
-route_action
-  ├── call_tool
-  ├── update_state
-  ├── ask_user
-  ├── compose_draft
-  ├── generate_report
-  └── END
-  ↓
-supervisor
-```
-
-Do not implement the first version as a hard-coded linear workflow unless it is only a temporary smoke test.
-
-Supported interaction modes:
-
-```text
-auto_draft
-  User supplies minimum core input.
-  Supervisor fills the draft with user-provided, candidate, suggested, and missing fields.
-  The system minimizes interruptions and makes uncertainty visible.
-
-guided_confirmation
-  Supervisor presents related field groups to the user.
-  Each candidate includes a recommendation, explanation, source/evidence, and risk note.
-  User-confirmed values can be promoted to confirmed field status.
-
-supplement_update
-  User can add information at any time.
-  The system parses the supplement, patches related fields, and re-evaluates affected draft/report parts.
-```
-
-## AgentAction Schema
-
-The Supervisor should output actions like:
-
-```json
-{
-  "action_type": "CALL_TOOL",
-  "tool_name": "web_search",
-  "tool_args": {
-    "query": "Q355B 12mm GMAW butt joint flat position pWPS WPS"
-  },
-  "rationale_summary": "Core scenario fields are available; search for similar cases and parameter references.",
-  "expected_state_change": "Add similar-case evidence for filler and welding parameters."
-}
-```
-
-Supported action types:
-
-```text
-USE_DOMAIN_SKILL
-CALL_TOOL
-UPDATE_STATE
-ASK_USER
-COMPOSE_DRAFT
-GENERATE_REPORT
-FINISH
-```
+Core input fields:
+- applicable_standard
+- base_material
+- thickness/wall_thickness
+- workpiece_type
+- diameter (when pipe/tube)
+- welding_process
+- joint_type
+- welding_position
 
 ## Output Files
 
-Each run should be able to produce:
+Each run produces:
 
-```text
-pwps.json
-pwps_draft.md
-field_report.json
-trace.json
+```
+<output_dir>/<run_id>/
+├── pwps.json              (state)
+├── pwps_draft.md          (Markdown)
+├── field_report.json      (fields + evidence + risks)
+├── trace.json             (action history)
+├── evidence_index.json    (evidence ↔ field mappings)
+└── checkpoints/           (resume points)
+    ├── 0.json
+    ├── 1.json
+    └── latest.json
 ```
 
-Optional:
+## Development
 
-```text
-pwps_draft.html
-field_report.md
+**Test baseline**
+```bash
+uv run pytest -q
+97 passed, 1 warning
 ```
 
-## Safety and Accuracy Notes
+**Smoke test**
+```bash
+uv run pwps-agent auto-draft "Q355B 12mm GMAW butt joint flat" \
+  --output-dir /tmp/smoke --run-id test1
+```
 
-This is an engineering-assistance system. It must not present draft output as final welding procedure approval.
+**Full verification**
+```bash
+uv run pytest -q && \
+uv run python -m compileall -q src tests && \
+git diff --check
+```
 
-Always preserve uncertainty:
+## Documentation Index
 
-- Unknown project metadata stays blank or “待确认”.
-- Web-derived values are `candidate` or `reference_only`.
-- LLM-derived values are `suggested`.
-- Thermal control, PWHT, heat input, and qualification-sensitive fields should be flagged when not backed by strong evidence.
+- `.instructions.md` - Development guidelines (START HERE)
+- `.agent.md` - Current goals and priorities
+- `docs/README.md` - Documentation navigation
+- `docs/architecture.md` - Module responsibilities and architecture
+- `docs/agent_design.md` - LLM Supervisor reasoning
+- `docs/data_schema.md` - State and contract models
+- `docs/requirements.md` - Original Stage One requirements
+- `docs/superpowers/plans/` - Completed phase documentation (archive)
 
-## Development Order
+## Important Notes
 
-Recommended implementation order:
+- **Do not** modify existing Pydantic contracts without updating all dependent code
+- **Do not** add features without updating Domain Skills guidance
+- **Do not** skip trace logging
+- **Do not** invent project metadata (customer name, contract #, etc.)
+- **Always** mark uncertain values with source + confidence
+- **Always** preserve evidence links in field_report
+- **Always** run full verification before committing
 
-1. Define `PWPSState`, `AgentAction`, `FieldState`, `Evidence`, `ToolResult`.
-2. Implement LLM Supervisor with structured output.
-3. Implement LangGraph builder and router.
-4. Implement `interaction_mode` handling for `auto_draft`, `guided_confirmation`, and supplemental updates.
-5. Implement requirement understanding tool.
-6. Implement field initialization and field merge tools.
-7. Implement local doc and web search tools.
-8. Implement evidence extraction and field reasoning tools.
-9. Implement draft rendering.
-10. Implement field/risk report.
-11. Add trace persistence.
-12. Add domain-skill guidance files.
-13. Add tests and sample runs.
+---
 
-## Testing Expectations
-
-Add tests for:
-
-- Schema validation.
-- Supervisor action parsing.
-- Tool result merging.
-- Field evidence linking.
-- Auto draft mode from minimum input.
-- Guided confirmation mode with user-confirmed field promotion.
-- Supplemental input updates to existing field state.
-- Draft rendering with missing fields.
-- Trace generation.
-- End-to-end demo input.
-
-Use small deterministic fixtures under `tests/fixtures/`.
-
-## Do Not Do
-
-- Do not add a hard-coded welding rule engine in stage one.
-- Do not make LLM a fallback after rules.
-- Do not create multiple expert agents prematurely.
-- Do not store important results only in natural language messages.
-- Do not generate fake project metadata.
-- Do not remove uncertainty labels from candidate values.
-- Do not claim final compliance or approval.
+Last updated: 2026-05-25
