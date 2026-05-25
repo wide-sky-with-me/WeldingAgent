@@ -16,7 +16,8 @@ Then choose based on your task:
 - **Understanding data model**: `data_schema.md`
 - **Debugging the graph**: `architecture.md` → `graph/` module code
 - **Adding a tool**: `agent_design.md` → `tools/` module code
-- **Extending guidance**: Review `domain_skills/` markdown files
+- **Extending guidance**: Review `src/pwps_agent/domain_skills/` markdown files
+- **Continuing current hardening work**: `superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md`
 
 ## Full Reference
 
@@ -27,11 +28,15 @@ Then choose based on your task:
 - **`data_schema.md`** - PWPSState structure, field definitions, evidence model
 - **`requirements.md`** - Original Stage One requirements (reference only)
 
+### Active Implementation Plan
+
+- **`superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md`** - LLM-led dual mode hardening for `auto_draft` and `guided_confirmation`
+
 ### Phase Implementation Plans (Archive)
 
 - **`superpowers/plans/README.md`** - Index of completed phases
 - **`superpowers/plans/2026-05-24-stage-one-completion-roadmap.md`** - Master roadmap
-- Other `.md` files in `plans/` are completed phase documentation (reference only)
+- Earlier dated `.md` files in `plans/` are completed phase documentation (reference only)
 
 ### Implementation Specs (Archive)
 
@@ -45,7 +50,7 @@ Then choose based on your task:
 
 1. Don't read all docs — read only what's needed for your task
 2. Check `.instructions.md` "Code Change Process" section
-3. Review relevant Domain Skills in `configs/prompts/`
+3. Review relevant Domain Skills in `src/pwps_agent/domain_skills/`
 4. Look at existing tests for similar patterns
 
 **When finishing work:**
@@ -59,7 +64,7 @@ Then choose based on your task:
 
 - About project scope/design: AGENTS.md Core Design Principles
 - About coding patterns: `.instructions.md` Code Style Conventions
-- About what's next: `.agent.md` Priority Goals
+- About what's next: `.agent.md` Priority Goals and the active hardening plan
 - About a specific phase: See that phase's plan/spec under `superpowers/`
 
 ---

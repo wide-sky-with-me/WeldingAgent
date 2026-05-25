@@ -84,6 +84,7 @@ As of 2026-05-25:
 - web_search (Tavily + Brave, caching, retry logic) ✅
 - local_doc_search (markdown/text retrieval) ✅
 - field_reasoning (evidence → candidates) ✅
+- field_reasoning no longer uses deterministic welding-content keyword fallback; empty LLM output leaves fields missing unless explicit model fallback is enabled ✅
 - section_generation (A/B/C/D/E structured output) ✅
 - risk_report (missing fields, thermal/qualification flags) ✅
 
@@ -105,17 +106,27 @@ As of 2026-05-25:
 - pwps_evidence_handling.md (uncertainty classification) ✅
 - pwps_risk_review.md (risk flagging) ✅
 
+**Active Hardening Plan**
+- `docs/superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md` is the active plan.
+- The LLM Supervisor remains the main actor.
+- `auto_draft` should only ask at the beginning when minimum core fields are missing.
+- `guided_confirmation` should recommend options and require human confirmation for key choices.
+- Upcoming work: initial information gates, publishability/state separation, evidence policy, guided options, Supervisor policy extraction, and agent eval metrics.
+
 **Recent Verification**
 
 ```bash
 uv run pytest -q
-97 passed, 1 warning
+142 passed
 
-uv run pytest tests/test_graph_auto_draft.py tests/test_guided_confirmation.py tests/test_graph_supervisor_planner.py -q
-10 passed
+uv run pytest tests/test_graph_auto_draft.py tests/test_evidence_reasoning.py tests/test_cli.py -q
+33 passed
 
 uv run python -m compileall -q src tests
 passed
+
+git diff --check
+passed with no output
 
 uv run pwps-agent auto-draft "Q355B 12mm GMAW" --output-dir /tmp/smoke --run-id verify1
 /tmp/smoke/verify1 ✅
@@ -186,7 +197,7 @@ Each run produces:
 **Test baseline**
 ```bash
 uv run pytest -q
-97 passed, 1 warning
+142 passed
 ```
 
 **Smoke test**

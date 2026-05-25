@@ -1,14 +1,22 @@
 # Completed Phase Plans (Archive)
 
-This directory contains completed implementation plans from Stage One development.
+This directory contains active and completed implementation plans from Stage One development.
 
-**Reference these only for:**
+## Active Plan
+
+| Plan | Status | Purpose |
+| --- | --- | --- |
+| `2026-05-25-llm-led-dual-mode-hardening.md` | IN PROGRESS | Harden the LLM-led `auto_draft` and `guided_confirmation` modes with initial interaction gates, publishability semantics, evidence policy, guided option recommendations, Supervisor policy extraction, and agent eval metrics. |
+
+## Completed Plan Archive
+
+**Reference completed plans only for:**
 
 - Understanding how features were designed
 - Reviewing architectural decisions made
 - Tracing feature history
 
-**For current work**: See `.agent.md` and `2026-05-24-stage-one-completion-roadmap.md` for active goals.
+**For current work**: See `.agent.md` and `2026-05-25-llm-led-dual-mode-hardening.md`.
 
 ## Completed Phases
 

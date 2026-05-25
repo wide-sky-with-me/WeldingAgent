@@ -94,6 +94,20 @@ class EmptySearchProvider:
         return []
 
 
+class FillerSearchProvider:
+    def search(self, query: str, query_id: str):
+        return [
+            SearchResult(
+                result_id="filler",
+                query_id=query_id,
+                provider="tavily",
+                title="WPS example",
+                url="https://example.test/filler",
+                snippet="ER50-6 is a candidate filler material for a comparable GMAW WPS.",
+            )
+        ]
+
+
 class StaticModelFallbackReasoningTool:
     def __call__(self, state, evidence, client):
         return ToolResult(
@@ -351,6 +365,43 @@ def test_graph_runs_verifier_before_composing_draft(tmp_path: Path):
         "refine_search",
         "synthesize_with_limitations",
     }
+
+
+def test_graph_does_not_create_hardcoded_candidates_when_reasoning_returns_empty(
+    tmp_path: Path,
+):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=FillerSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=EmptyReasoningTool(),
+    )
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="no_hardcoded_candidate",
+    )
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    final_state = result["pwps_state"]
+    field = final_state.fields["filler_material"]
+    assert final_state.status == "done"
+    assert field.value is None
+    assert field.status == "missing"
+    assert any(
+        entry["node"] == "field_reasoning"
+        and entry["summary"] == "Field reasoning returned no field candidates."
+        for entry in final_state.trace
+    )
 
 
 def test_graph_refines_when_verifier_finds_critical_missing_fields(tmp_path: Path):

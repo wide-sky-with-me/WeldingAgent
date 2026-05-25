@@ -53,65 +53,6 @@ class FieldReasoningOutput(BaseModel):
     )
 
 
-def infer_candidates_from_evidence(evidence: list[Evidence]) -> dict[str, dict[str, Any]]:
-    candidates: dict[str, dict[str, Any]] = {}
-    for item in evidence:
-        text = item.content.upper()
-        if "ER50-6" in text and "filler_material" not in candidates:
-            candidates["filler_material"] = {
-                "value": "ER50-6",
-                "evidence_ids": [item.evidence_id],
-                "note": "Candidate filler material inferred from web evidence.",
-            }
-    return candidates
-
-
-def apply_field_candidates(
-    state: PWPSState,
-    candidates: dict[str, dict[str, Any]],
-) -> PWPSState:
-    updated = state.model_copy(deep=True)
-    for field_id, candidate in candidates.items():
-        if field_id not in updated.fields:
-            continue
-        field = updated.fields[field_id]
-        if _has_user_priority(field):
-            field.candidates.append(
-                {
-                    "value": candidate.get("value"),
-                    "status": "candidate",
-                    "evidence_ids": list(candidate.get("evidence_ids", [])),
-                    "note": candidate.get("note"),
-                }
-            )
-            continue
-        field.value = candidate.get("value")
-        field.status = "candidate"
-        field.confidence = "medium"
-        field.note = candidate.get("note")
-        field.evidence_ids = list(candidate.get("evidence_ids", []))
-        field.source = {"type": "web", "evidence_ids": field.evidence_ids}
-        field.confirmation = {"required": True, "confirmed": False}
-        field.candidates.append(
-            {
-                "value": field.value,
-                "status": "candidate",
-                "evidence_ids": field.evidence_ids,
-                "note": field.note,
-            }
-        )
-    return updated
-
-
-def _has_user_priority(field: Any) -> bool:
-    source_type = (field.source or {}).get("type")
-    return field.status == "user_confirmed" or field.status == "filled" and source_type in {
-        None,
-        "user_input",
-        "user_confirmation",
-    }
-
-
 def reason_fields_from_evidence(
     state: PWPSState,
     evidence: list[Evidence],

@@ -14,10 +14,10 @@
 
 3. **What should I work on?**
    - See: `.agent.md` "Next Priority Goals"
-   - Pick one of Phase 8 options (A/B/C/D) - all equally ready
+   - Current active plan: `docs/superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md`
 
 4. **How do I debug/verify?**
-   - Full test: `uv run pytest -q` (expect 144 passed)
+   - Full test: `uv run pytest -q` (current branch expects 142 passed)
    - Smoke test: `uv run pwps-agent auto-draft "Q355B 12mm GMAW" --output-dir /tmp/smoke --run-id test1`
    - Compilation: `uv run python -m compileall -q src tests`
 
@@ -112,36 +112,23 @@ Example commit message:
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
 
-## Phase 8 Options (Pick One)
+## Active Hardening Plan
 
-**All are equally ready. Choose based on interest:**
+Work from `docs/superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md`.
 
-### A: Sample Run Harness & Documentation
-- Create deterministic sample runs
-- Document expected outputs
-- Add run scripts
-- Clean up old docs
+Task order:
 
-### B: Error Handling & Edge Cases  
-- Add fallback for LLM structured output failures
-- Handle partial web search results
-- Support missing local docs gracefully
-- Circuit breaker for provider outages
+1. Initial information gate for `auto_draft`
+2. Separate confidence, confirmation, and publishability
+3. Evidence policy and promotion gate
+4. Guided option recommendation tool
+5. Split Supervisor policy from LLM planning
+6. Agent eval metrics
 
-### C: CLI Polish & Help
-- Add `--help` with usage examples
-- Improve error messages
-- Add config validation command
-- Document environment variables
-
-### D: Domain Skills Enrichment
-- Expand guided_confirmation field grouping
-- Add PWHT/thermal risk detection
-- Create WPS vs pWPS guidance
-- Enhance evidence classification
+The LLM Supervisor stays the main actor. The goal is stronger boundaries, evidence governance, interaction gates, and eval metrics.
 
 ---
 
 **Last updated**: 2026-05-25
-**Test baseline**: 144 passed, 1 warning
+**Test baseline**: 142 passed
 **Questions?** Start with `.instructions.md`, then AGENTS.md

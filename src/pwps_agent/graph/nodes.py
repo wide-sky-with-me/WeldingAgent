@@ -6,17 +6,16 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pwps_agent.agent.prompt_loader import load_domain_skill
 from pwps_agent.core.contracts import SearchResult
 from pwps_agent.core.modes import apply_supplement, build_confirmation_view
+from pwps_agent.core.state_merge import merge_state_patch as _merge_state_patch
 from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.graph.state import GraphState
 from pwps_agent.render.markdown import render_field_report, render_pwps_draft
 from pwps_agent.storage.persist import persist_run_artifacts
 from pwps_agent.tools.evidence import search_results_to_evidence
-from pwps_agent.tools.field_reasoning import apply_field_candidates, infer_candidates_from_evidence
 from pwps_agent.tools.local_doc_search import search_local_documents
 from pwps_agent.tools.draft_verifier import verify_draft_quality
 from pwps_agent.tools.risk_report import generate_risk_report
 from pwps_agent.tools.section_generation import generate_sections
-from pwps_agent.workflows.auto_draft import _merge_state_patch
 
 LOGGER = logging.getLogger(__name__)
 
@@ -271,9 +270,7 @@ def call_tool_node(graph_state: GraphState) -> dict:
                 else result.summary
             )
         else:
-            candidates = infer_candidates_from_evidence(state.evidence)
-            state = apply_field_candidates(state, candidates)
-            summary = "Used deterministic evidence fallback."
+            summary = "Field reasoning returned no field candidates."
         _append_trace(
             state,
             "field_reasoning",

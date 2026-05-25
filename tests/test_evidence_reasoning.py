@@ -4,7 +4,7 @@ from pwps_agent.tools.evidence import (
     is_low_quality_source_ref,
     search_results_to_evidence,
 )
-from pwps_agent.tools.field_reasoning import apply_field_candidates, reason_fields_from_evidence
+from pwps_agent.tools.field_reasoning import reason_fields_from_evidence
 from pwps_agent.tools.field_reasoning import _field_reasoning_user_prompt
 
 
@@ -104,52 +104,6 @@ def test_field_reasoning_prompt_includes_field_schema_and_targets() -> None:
     assert "blocked inferred fields" in prompt.lower()
     assert "project_name" in prompt
     assert "refinement_focus_fields=filler_material" in prompt
-
-
-def test_apply_field_candidates_marks_values_as_candidate_with_evidence() -> None:
-    state = create_initial_state("Q355B GMAW", "auto_draft")
-
-    updated = apply_field_candidates(
-        state,
-        candidates={
-            "filler_material": {
-                "value": "ER50-6",
-                "evidence_ids": ["ev_r1"],
-                "note": "Candidate from web reference.",
-            }
-        },
-    )
-
-    field = updated.fields["filler_material"]
-    assert field.value == "ER50-6"
-    assert field.status == "candidate"
-    assert field.confidence == "medium"
-    assert field.evidence_ids == ["ev_r1"]
-    assert field.confirmation["required"] is True
-
-
-def test_apply_field_candidates_does_not_overwrite_user_filled_field() -> None:
-    state = create_initial_state("Q355B GMAW", "auto_draft")
-    state.fields["base_material"].value = "Q355B"
-    state.fields["base_material"].status = "filled"
-    state.fields["base_material"].source = {"type": "user_input", "ref": "ev_user_input_1"}
-
-    updated = apply_field_candidates(
-        state,
-        candidates={
-            "base_material": {
-                "value": "S355 J0",
-                "evidence_ids": ["ev_r1"],
-                "note": "Possible equivalent from web evidence.",
-            }
-        },
-    )
-
-    field = updated.fields["base_material"]
-    assert field.value == "Q355B"
-    assert field.status == "filled"
-    assert field.candidates[0]["value"] == "S355 J0"
-    assert field.candidates[0]["status"] == "candidate"
 
 
 class StaticReasoningClient:
