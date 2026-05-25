@@ -14,18 +14,28 @@
 
 The current repository already has:
 
-- Runnable `auto_draft` vertical slice.
-- Structured LLM-backed tools for requirement understanding, knowledge planning, and field reasoning.
-- Real web search provider integration with caching/retry behavior.
-- Evidence conversion, field merge priority rules, Markdown draft rendering, field report rendering, trace persistence, and `evidence_index.json`.
-- LangGraph action loop with deterministic planning, tool routing, retry/timeout handling, checkpoint/resume helpers, and injectable planner support.
-- First guided-confirmation slice with grouped view, user confirmations, edit/rollback history, CLI commands, graph `ASK_USER` pause, graph-backed resume, and lightweight local Web UI/API.
-
 Verified baseline:
 
 ```text
 uv run pytest -q
 64 passed, 1 warning
+```
+
+2026-05-25 prompt/domain-skill refinement:
+
+- Expanded the terse prompt files into explicit task contracts with identity,
+  inputs, rules, output expectations, and concrete examples.
+- Expanded domain-skill markdown with success criteria, operating order,
+  grouping strategy, evidence hierarchy, and risk/output patterns.
+- Verification: `uv run pytest tests/test_domain_skills.py -q` and
+  `git diff --check`.
+
+```text
+uv run pytest tests/test_domain_skills.py -q
+4 passed
+
+git diff --check
+passed with no output
 ```
 
 ## Completion Strategy

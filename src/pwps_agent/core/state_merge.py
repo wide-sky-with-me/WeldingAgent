@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from pwps_agent.core.contracts import Evidence
 from pwps_agent.core.fields import FieldState
+from pwps_agent.core.quality import DraftQualityReport
 from pwps_agent.core.state import PWPSState
 
 
@@ -22,6 +23,9 @@ ALLOWED_PATCH_KEYS = {
     "draft_markdown",
     "draft_html",
     "field_report",
+    "quality_report",
+    "refinement_attempts",
+    "max_refinement_attempts",
     "status",
 }
 
@@ -50,9 +54,55 @@ def merge_state_patch(state: PWPSState, patch: dict[str, Any]) -> PWPSState:
         updated.draft_html = str(patch["draft_html"])
     if "field_report" in patch:
         updated.field_report = dict(patch["field_report"])
+    if "quality_report" in patch:
+        _merge_quality_report(updated, patch["quality_report"])
+    if "refinement_attempts" in patch:
+        _merge_refinement_counter(
+            updated,
+            "refinement_attempts",
+            patch["refinement_attempts"],
+            0,
+        )
+    if "max_refinement_attempts" in patch:
+        _merge_refinement_counter(
+            updated,
+            "max_refinement_attempts",
+            patch["max_refinement_attempts"],
+            1,
+        )
     if "status" in patch:
         updated.status = patch["status"]
     return updated
+
+
+def _merge_quality_report(state: PWPSState, value: Any) -> None:
+    if value is None:
+        state.quality_report = None
+        return
+    try:
+        state.quality_report = DraftQualityReport.model_validate(value).model_dump()
+    except ValidationError as exc:
+        _append_merge_warning(
+            state,
+            "Ignored invalid quality report patch.",
+            {"key": "quality_report", "error": str(exc)},
+        )
+
+
+def _merge_refinement_counter(
+    state: PWPSState,
+    key: str,
+    value: Any,
+    minimum: int,
+) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        _append_merge_warning(
+            state,
+            "Ignored invalid refinement counter patch.",
+            {"key": key, "value": value, "minimum": minimum},
+        )
+        return
+    setattr(state, key, value)
 
 
 def _merge_fields(state: PWPSState, fields_patch: dict[str, dict[str, Any]]) -> None:

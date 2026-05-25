@@ -155,6 +155,8 @@ def _user_prompt(state: PWPSState) -> str:
         for field_id, field in state.fields.items()
         if field.status in {"candidate", "suggested", "need_confirmation", "conflict"}
     ]
+    quality_report = state.quality_report or {}
+    previous_queries = [query.get("query_text") for query in state.knowledge_queries]
     return "\n".join(
         [
             f"user_input: {state.user_input}",
@@ -162,6 +164,10 @@ def _user_prompt(state: PWPSState) -> str:
             f"core_fields: {state.core_fields}",
             f"missing_fields: {missing_fields}",
             f"candidate_or_risk_fields: {candidate_fields}",
+            f"quality_refinement_focus_fields: {quality_report.get('refinement_focus_fields', [])}",
+            f"quality_critical_missing_fields: {quality_report.get('critical_missing_fields', [])}",
+            f"quality_weak_evidence_fields: {quality_report.get('weak_evidence_fields', [])}",
+            f"previous_query_texts: {previous_queries}",
             "Plan 1-3 targeted queries. Each query should explain which missing fields it supports.",
         ]
     )

@@ -97,6 +97,7 @@ class LLMSupervisorPlanner:
                 "USE_DOMAIN_SKILL",
                 "CALL_TOOL",
                 "ASK_USER",
+                "VERIFY_DRAFT",
                 "COMPOSE_DRAFT",
                 "GENERATE_REPORT",
                 "FINISH",
@@ -174,6 +175,7 @@ def supervisor_node(graph_state: GraphState) -> dict:
         state,
         action,
         context.settings.knowledge.sources,
+        planner_mode=planner_mode,
     )
     if override_action is not None:
         state.trace.append(
@@ -201,6 +203,8 @@ def supervisor_node(graph_state: GraphState) -> dict:
             override_action.tool_name,
         )
         action = override_action
+    if _is_refinement_planning_action(action):
+        state.refinement_attempts += 1
     state.pending_action = action
     state.actions.append(action)
     LOGGER.info(
@@ -222,6 +226,7 @@ def supervisor_node(graph_state: GraphState) -> dict:
                 "tool_name": action.tool_name,
                 "action_index": len(state.actions),
                 "planner": planner_mode,
+                "refinement_attempts": state.refinement_attempts,
             },
         }
     )
@@ -248,6 +253,7 @@ def _validate_action(action: AgentAction) -> str | None:
         "CALL_TOOL",
         "UPDATE_STATE",
         "ASK_USER",
+        "VERIFY_DRAFT",
         "COMPOSE_DRAFT",
         "GENERATE_REPORT",
         "FINISH",
@@ -260,7 +266,9 @@ def _override_repeated_completed_action(
     state: PWPSState,
     action: AgentAction,
     knowledge_sources: list[str] | None = None,
+    planner_mode: str = "injected",
 ) -> AgentAction | None:
+    last = _last_node_indexes(state)
     if (
         _node_completed(state, "compose_draft")
         and state.interaction_mode == "guided_confirmation"
@@ -280,6 +288,49 @@ def _override_repeated_completed_action(
             expected_state_change="Mark graph run as done.",
             stop_reason="auto_draft_complete",
         )
+    if (
+        _node_completed(state, "field_reasoning")
+        and not _node_completed(state, "draft_verifier")
+        and action.action_type in {"COMPOSE_DRAFT", "FINISH"}
+    ):
+        return AgentAction(
+            action_type="VERIFY_DRAFT",
+            rationale_summary="Verify draft quality before synthesis.",
+            expected_state_change="Attach deterministic quality report to state.",
+        )
+    if (
+        planner_mode == "llm"
+        and _workflow_started(state)
+        and not _node_completed(state, "compose_draft")
+        and action.action_type in {"COMPOSE_DRAFT", "FINISH"}
+    ):
+        safe_next = plan_next_auto_draft_action(state, knowledge_sources)
+        if action.action_type == "FINISH" or safe_next.action_type != "COMPOSE_DRAFT":
+            return safe_next
+    if (
+        _needs_refinement_planning(state, last)
+        and action.action_type in {"COMPOSE_DRAFT", "FINISH"}
+    ):
+        return plan_next_auto_draft_action(state, knowledge_sources)
+    if (
+        _needs_guided_confirmation_pause(state)
+        and action.action_type in {"COMPOSE_DRAFT", "FINISH"}
+    ):
+        return AgentAction(
+            action_type="ASK_USER",
+            rationale_summary="Verifier found fields that need guided human review.",
+            expected_state_change="Pause with grouped confirmation view.",
+        )
+    if (
+        _node_completed(state, "draft_verifier")
+        and not _node_completed(state, "compose_draft")
+        and action.action_type == "FINISH"
+    ):
+        return AgentAction(
+            action_type="COMPOSE_DRAFT",
+            rationale_summary="Quality verification is complete; compose draft artifacts.",
+            expected_state_change="Persist draft/report artifacts and attach them to state.",
+        )
     if state.interaction_mode == "auto_draft" and action.action_type == "ASK_USER":
         return plan_next_auto_draft_action(state, knowledge_sources)
     if action.action_type == "CALL_TOOL" and action.tool_name:
@@ -298,11 +349,25 @@ def _override_repeated_completed_action(
         return plan_next_auto_draft_action(state, knowledge_sources)
     if action.action_type == "GENERATE_REPORT" and _node_completed(state, "risk_report"):
         return plan_next_auto_draft_action(state, knowledge_sources)
+    if action.action_type == "VERIFY_DRAFT" and _node_completed(state, "draft_verifier"):
+        return plan_next_auto_draft_action(state, knowledge_sources)
     return None
 
 
 def _node_completed(state: PWPSState, node: str) -> bool:
     return any(entry.get("node") == node for entry in state.trace)
+
+
+def _workflow_started(state: PWPSState) -> bool:
+    workflow_nodes = {
+        "requirement_understanding",
+        "knowledge_planning",
+        "local_doc_search",
+        "web_search",
+        "field_reasoning",
+        "draft_verifier",
+    }
+    return any(entry.get("node") in workflow_nodes for entry in state.trace)
 
 
 def _has_pending_confirmation_fields(state: PWPSState) -> bool:
@@ -324,6 +389,7 @@ def plan_next_auto_draft_action(
 ) -> AgentAction:
     sources = knowledge_sources or ["local_doc", "web"]
     completed_nodes = {entry.get("node") for entry in state.trace}
+    last = _last_node_indexes(state)
     if "requirement_understanding" not in completed_nodes:
         return _tool_action(
             "requirement_understanding",
@@ -334,24 +400,54 @@ def plan_next_auto_draft_action(
             "knowledge_planning",
             "Plan targeted evidence queries for missing or risky fields.",
         )
+    if _needs_refinement_planning(state, last):
+        return AgentAction(
+            action_type="CALL_TOOL",
+            tool_name="knowledge_planning",
+            tool_args={"operation": "refinement"},
+            rationale_summary=(
+                "Verifier found critical gaps; plan refinement queries before synthesis."
+            ),
+            expected_state_change="Add refinement knowledge queries for uncovered fields.",
+        )
     if (
         "local_doc" in sources
-        and "local_doc_search" not in completed_nodes
+        and _node_needs_refresh(last, "local_doc_search", "knowledge_planning")
         and _has_local_doc_queries(state)
     ):
         return _tool_action(
             "local_doc_search",
             "Search local documents for planned evidence references.",
         )
-    if "web" in sources and "web_search" not in completed_nodes and _has_web_queries(state):
+    if (
+        "web" in sources
+        and _node_needs_refresh(last, "web_search", "knowledge_planning")
+        and _has_web_queries(state)
+    ):
         return _tool_action(
             "web_search",
             "Run planned web searches and convert results into evidence.",
         )
-    if "field_reasoning" not in completed_nodes:
+    if _node_needs_refresh_after_any(
+        last,
+        "field_reasoning",
+        ["web_search", "local_doc_search", "knowledge_planning"],
+    ):
         return _tool_action(
             "field_reasoning",
             "Reason traceable candidate fields from collected evidence.",
+        )
+    if _node_needs_refresh(last, "draft_verifier", "field_reasoning"):
+        return AgentAction(
+            action_type="VERIFY_DRAFT",
+            rationale_summary="Verify draft quality before synthesis.",
+            expected_state_change="Attach deterministic quality report to state.",
+        )
+    if _needs_guided_confirmation_pause(state):
+        return AgentAction(
+            action_type="ASK_USER",
+            rationale_summary="Verifier found fields that need guided human review.",
+            expected_state_change="Pause with grouped confirmation view.",
         )
     if "compose_draft" not in completed_nodes:
         return AgentAction(
@@ -364,6 +460,14 @@ def plan_next_auto_draft_action(
         rationale_summary="The auto-draft graph has produced the required artifacts.",
         expected_state_change="Mark graph run as done.",
         stop_reason="auto_draft_complete",
+    )
+
+
+def _is_refinement_planning_action(action: AgentAction) -> bool:
+    return (
+        action.action_type == "CALL_TOOL"
+        and action.tool_name == "knowledge_planning"
+        and action.tool_args.get("operation") == "refinement"
     )
 
 
@@ -387,4 +491,44 @@ def _has_web_queries(state: PWPSState) -> bool:
     return any(
         "web" in (query.get("preferred_sources") or ["web"])
         for query in state.knowledge_queries
+    )
+
+
+def _last_node_indexes(state: PWPSState) -> dict[str, int]:
+    indexes: dict[str, int] = {}
+    for index, entry in enumerate(state.trace):
+        node = entry.get("node")
+        if isinstance(node, str):
+            indexes[node] = index
+    return indexes
+
+
+def _node_needs_refresh(last: dict[str, int], node: str, dependency: str) -> bool:
+    return last.get(node, -1) < last.get(dependency, -1)
+
+
+def _node_needs_refresh_after_any(
+    last: dict[str, int],
+    node: str,
+    dependencies: list[str],
+) -> bool:
+    return last.get(node, -1) < max((last.get(dep, -1) for dep in dependencies), default=-1)
+
+
+def _needs_refinement_planning(state: PWPSState, last: dict[str, int]) -> bool:
+    report = state.quality_report or {}
+    return (
+        state.interaction_mode == "auto_draft"
+        and report.get("recommended_action") == "refine_search"
+        and state.refinement_attempts < state.max_refinement_attempts
+        and last.get("draft_verifier", -1) > last.get("knowledge_planning", -1)
+    )
+
+
+def _needs_guided_confirmation_pause(state: PWPSState) -> bool:
+    report = state.quality_report or {}
+    return (
+        state.interaction_mode == "guided_confirmation"
+        and report.get("mode_guidance") == "ask_user_for_confirmation"
+        and bool(report.get("human_review_fields"))
     )

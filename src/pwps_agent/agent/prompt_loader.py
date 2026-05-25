@@ -5,8 +5,11 @@ from functools import lru_cache
 from pathlib import Path
 
 
-PROMPT_DIR = Path("configs/prompts")
-DOMAIN_SKILL_DIR = Path("src/pwps_agent/domain_skills")
+_PACKAGE_DIR = Path(__file__).resolve().parents[1]
+_PROJECT_DIR = _PACKAGE_DIR.parents[1]
+
+PROMPT_DIR = _PROJECT_DIR / "configs" / "prompts"
+DOMAIN_SKILL_DIR = _PACKAGE_DIR / "domain_skills"
 
 
 @dataclass(frozen=True)
@@ -15,14 +18,20 @@ class DomainSkill:
     content: str
 
 
+def _load_markdown_file(name: str, base_dir: Path, kind: str) -> str:
+    if "/" in name or "\\" in name:
+        raise ValueError(f"{kind} name must not include path separators")
+
+    path = base_dir / f"{name}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"{kind} file not found: {path}")
+
+    return path.read_text(encoding="utf-8").strip()
+
+
 @lru_cache(maxsize=32)
 def load_prompt(name: str, prompt_dir: Path = PROMPT_DIR) -> str:
-    if "/" in name or "\\" in name:
-        raise ValueError("Prompt name must not include path separators")
-    path = prompt_dir / f"{name}.md"
-    if not path.exists():
-        raise FileNotFoundError(f"Prompt file not found: {path}")
-    return path.read_text(encoding="utf-8").strip()
+    return _load_markdown_file(name, prompt_dir, "Prompt")
 
 
 @lru_cache(maxsize=32)
@@ -30,12 +39,8 @@ def load_domain_skill(
     name: str,
     skill_dir: Path = DOMAIN_SKILL_DIR,
 ) -> DomainSkill:
-    if "/" in name or "\\" in name:
-        raise ValueError("Domain skill name must not include path separators")
-    path = skill_dir / f"{name}.md"
-    if not path.exists():
-        raise FileNotFoundError(f"Domain skill file not found: {path}")
-    return DomainSkill(name=name, content=path.read_text(encoding="utf-8").strip())
+    content = _load_markdown_file(name, skill_dir, "Domain skill")
+    return DomainSkill(name=name, content=content)
 
 
 def load_domain_skill_bundle(

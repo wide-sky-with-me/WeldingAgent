@@ -13,6 +13,7 @@ from pwps_agent.storage.persist import persist_run_artifacts
 from pwps_agent.tools.evidence import search_results_to_evidence
 from pwps_agent.tools.field_reasoning import apply_field_candidates, infer_candidates_from_evidence
 from pwps_agent.tools.local_doc_search import search_local_documents
+from pwps_agent.tools.draft_verifier import verify_draft_quality
 from pwps_agent.tools.risk_report import generate_risk_report
 from pwps_agent.tools.section_generation import generate_sections
 from pwps_agent.workflows.auto_draft import _merge_state_patch
@@ -335,6 +336,25 @@ def compose_draft_node(graph_state: GraphState) -> dict:
     return {"pwps_state": state}
 
 
+def verify_draft_node(graph_state: GraphState) -> dict:
+    state = graph_state["pwps_state"].model_copy(deep=True)
+    context = graph_state["context"]
+    result = verify_draft_quality(state)
+    state = _merge_state_patch(state, result.state_patch)
+    _append_trace(
+        state,
+        "draft_verifier",
+        "tool_result",
+        result.summary,
+        {
+            "success": result.success,
+            "quality_report": result.state_patch.get("quality_report"),
+        },
+    )
+    _finalize_runtime_node(state, context, "draft_verifier")
+    return {"pwps_state": state}
+
+
 def generate_report_node(graph_state: GraphState) -> dict:
     state = graph_state["pwps_state"].model_copy(deep=True)
     context = graph_state["context"]
@@ -511,13 +531,24 @@ def _has_external_evidence(state) -> bool:
 def _mark_model_fallback_fields(fields: dict) -> dict:
     marked = {}
     for field_id, field_patch in fields.items():
+        if field_id in {
+            "pwps_no",
+            "revision_no",
+            "date",
+            "company",
+            "project_name",
+            "client",
+            "contract_no",
+        }:
+            continue
         patch = dict(field_patch)
         note = patch.get("note")
         fallback_note = "Suggested by model fallback because no external evidence was retrieved."
         patch["status"] = "suggested"
-        patch["confidence"] = patch.get("confidence") or "low"
-        patch["evidence_ids"] = []
-        patch["source"] = {"type": "llm", "evidence_ids": []}
+        patch["confidence"] = "low"
+        evidence_ids = list(patch.get("evidence_ids") or [])
+        patch["evidence_ids"] = evidence_ids
+        patch["source"] = {"type": "model_fallback", "evidence_ids": evidence_ids}
         patch["confirmation"] = {"required": True, "confirmed": False}
         patch["note"] = f"{note} {fallback_note}" if note else fallback_note
         marked[field_id] = patch

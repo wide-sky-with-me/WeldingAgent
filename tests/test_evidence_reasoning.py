@@ -1,7 +1,11 @@
 from pwps_agent.core.contracts import SearchResult
 from pwps_agent.core.state import create_initial_state
-from pwps_agent.tools.evidence import search_results_to_evidence
+from pwps_agent.tools.evidence import (
+    is_low_quality_source_ref,
+    search_results_to_evidence,
+)
 from pwps_agent.tools.field_reasoning import apply_field_candidates, reason_fields_from_evidence
+from pwps_agent.tools.field_reasoning import _field_reasoning_user_prompt
 
 
 def test_search_results_convert_to_web_evidence() -> None:
@@ -59,6 +63,47 @@ def test_search_results_classify_source_tier_and_reliability() -> None:
         ("textbook", "medium"),
         ("webpage", "low"),
     ]
+
+
+def test_low_quality_source_detection_flags_known_markers() -> None:
+    assert is_low_quality_source_ref("https://facebook.com/example-wps") is True
+    assert is_low_quality_source_ref("https://instagram.com/example-wps") is True
+    assert is_low_quality_source_ref("https://scribd.com/document/123") is True
+    assert is_low_quality_source_ref("https://shop.myshopify.com/products/wps") is True
+    assert is_low_quality_source_ref("https://example.com/forum/wps-thread") is True
+    assert is_low_quality_source_ref("https://example.com/topic_show.php?id=1") is True
+    assert is_low_quality_source_ref("https://www.aws.org/standards/page/d1.1") is False
+    assert is_low_quality_source_ref(None) is False
+
+
+def test_field_reasoning_prompt_includes_field_schema_and_targets() -> None:
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="reasoning_context",
+    )
+    state.knowledge_queries = [
+        {
+            "query_id": "kq_002",
+            "target_fields": ["filler_material", "polarity"],
+            "purpose": "filler_reference",
+        }
+    ]
+    state.quality_report = {
+        "recommended_action": "refine_search",
+        "refinement_focus_fields": ["filler_material"],
+        "critical_missing_fields": ["polarity"],
+        "weak_evidence_fields": ["shielding_gas"],
+    }
+
+    prompt = _field_reasoning_user_prompt(state, [])
+
+    assert "filler_material" in prompt
+    assert "焊材型号/分类号" in prompt
+    assert "polarity" in prompt
+    assert "blocked inferred fields" in prompt.lower()
+    assert "project_name" in prompt
+    assert "refinement_focus_fields=filler_material" in prompt
 
 
 def test_apply_field_candidates_marks_values_as_candidate_with_evidence() -> None:

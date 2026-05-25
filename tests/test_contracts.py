@@ -14,6 +14,13 @@ def test_agent_action_separates_domain_skill_from_runtime_tool() -> None:
     assert action.domain_skill_name is None
 
 
+def test_agent_action_defaults_missing_rationale_for_llm_resilience() -> None:
+    action = AgentAction(action_type="CALL_TOOL", tool_name="web_search")
+
+    assert action.rationale_summary
+    assert "without a rationale" in action.rationale_summary
+
+
 def test_tool_result_returns_state_patch_without_mutating_state() -> None:
     result = ToolResult(
         tool_name="field_merge",

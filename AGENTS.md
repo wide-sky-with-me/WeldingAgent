@@ -39,6 +39,8 @@ The system currently targets draft generation only. Do not claim that outputs ar
 - Keep progress updates evidence-based: include the verification command, result, and any live smoke output path when relevant.
 - Do not mark a task complete in progress docs until the implementation and verification have actually run.
 - After each work cycle, clean up obvious junk code, temporary assertions, dead test scaffolding, unused imports, and accidental debug output before verification and commit.
+- Before each development cycle, review the applicable technical specifications and project guidance first, including this file, the active plan under `docs/superpowers/plans/`, relevant Domain Skills/prompts, and official framework/library documentation when changing framework behavior.
+- Existing implementation is allowed to change or be deleted when it no longer serves the current target architecture. Do not preserve legacy code paths merely for compatibility if they conflict with the approved plan; verify the replacement behavior and remove dead code/tests/artifacts deliberately.
 
 ## Current Stage
 
@@ -92,6 +94,8 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 - Web search providers now support instance-level query caching plus configurable transient-error retry/backoff, while avoiding retries for non-transient authorization failures.
 - Evidence converted from web search now includes source-tier and confidence metadata, classifying references as official-standard, textbook, or webpage tier while preserving candidate/reference-only semantics.
 - Run persistence now writes `evidence_index.json` with retrieval context, evidence records, evidence-to-field mappings, and field-to-evidence mappings for reuse and audit.
+- Draft workflows now include a planner-executor-verifier-synthesis quality loop. In `auto_draft`, the LLM uses verifier feedback for bounded refinement and cautious suggestions; in `guided_confirmation`, verifier findings are surfaced for human review.
+- Draft quality verification writes `PWPSState.quality_report`, persists `quality_report.json`, records verifier/refinement trace events, and the Markdown draft includes a concise quality summary while leaving full field/risk detail in `field_report.json`.
 - Structured section generation and risk reporting now run as explicit tools before draft persistence; `PWPSState.sections` and `field_report` carry structured output for the renderer.
 - State patch merging now goes through `core/state_merge.py`, with allowed patch keys, unknown-key/unknown-field merge warnings, field priority protection, candidate preservation, timestamp metadata, and ID-based de-duplication for knowledge queries, search results, and evidence.
 - Supervisor action decisions now include action metadata in trace, including action type, tool name, and action index.
@@ -108,6 +112,27 @@ As of 2026-05-25, the repository has a runnable `auto_draft` vertical slice and 
 Recent verification:
 
 ```text
+uv run pytest tests/test_draft_quality.py tests/test_graph_auto_draft.py tests/test_graph_guided_confirmation.py tests/test_guided_confirmation.py tests/test_knowledge_planning.py tests/test_evidence_reasoning.py tests/test_render.py tests/test_config.py tests/test_web_search_provider.py -q
+67 passed in 1.00s
+
+uv run pytest tests/test_contracts.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py -q
+29 passed in 0.99s
+
+uv run pytest -q
+144 passed in 2.47s
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
+KNOWLEDGE_SOURCES=web,model TAVILY_SEARCH_DEPTH=advanced TAVILY_INCLUDE_RAW_CONTENT=true WEB_SEARCH_MAX_RESULTS=8 uv run pwps-agent auto-draft "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" --output-dir outputs/pwps-agent-quality-loop --run-id quality_loop_smoke3
+outputs/pwps-agent-quality-loop/quality_loop_smoke3
+persisted pwps.json status: done
+quality_report.json: quality=partial, recommended_action=synthesize, field_counts candidate=12 filled=7 missing=18 suggested=4
+trace: draft_verifier refine_search, then draft_verifier synthesize before compose_draft
+
 uv run pytest tests/test_config.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py tests/test_graph_supervisor_planner.py tests/test_graph_auto_draft.py tests/test_cli.py -q
 48 passed
 

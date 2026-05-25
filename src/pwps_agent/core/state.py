@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from pwps_agent.core.contracts import AgentAction, ConfirmationRecord, Evidence
 from pwps_agent.core.fields import FieldState, initialize_fields
+from pwps_agent.core.quality import DraftQualityReport
 
 
 class PWPSState(BaseModel):
@@ -28,11 +29,23 @@ class PWPSState(BaseModel):
     draft_markdown: str = ""
     draft_html: str = ""
     field_report: dict[str, object] = Field(default_factory=dict)
+    quality_report: dict[str, Any] | None = None
+    refinement_attempts: Annotated[int, Field(ge=0, strict=True)] = 0
+    max_refinement_attempts: Annotated[int, Field(ge=1, strict=True)] = 2
     clarification_questions: list[dict] = Field(default_factory=list)
     risks: list[dict] = Field(default_factory=list)
     trace: list[dict] = Field(default_factory=list)
     status: Literal["running", "need_user_input", "done", "failed", "interrupted"] = "running"
     step_count: int = 0
+
+    @field_validator("quality_report", mode="before")
+    @classmethod
+    def _validate_quality_report(cls, value: Any) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        if isinstance(value, DraftQualityReport):
+            return value.model_dump()
+        return DraftQualityReport.model_validate(value).model_dump()
 
 
 def create_initial_state(

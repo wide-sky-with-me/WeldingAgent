@@ -46,6 +46,25 @@ def test_tavily_response_parses_to_search_results() -> None:
     assert results[0].provider == "tavily"
     assert results[0].url == "https://example.com/wps"
     assert results[0].snippet == "GMAW Q355B example."
+    assert results[0].raw_content == "Long content"
+
+
+def test_tavily_parse_response_preserves_raw_content() -> None:
+    payload = {
+        "results": [
+            {
+                "title": "ER70S-6 datasheet",
+                "url": "https://example.com/er70s-6",
+                "content": "short snippet",
+                "raw_content": "long datasheet content",
+                "score": 0.9,
+            }
+        ]
+    }
+
+    results = TavilySearchProvider.parse_response("kq_001", payload)
+
+    assert results[0].raw_content == "long datasheet content"
 
 
 def test_brave_response_parses_to_search_results() -> None:

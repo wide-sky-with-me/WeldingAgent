@@ -1,5 +1,5 @@
 from pwps_agent.core.state import create_initial_state
-from pwps_agent.tools.knowledge_planning import plan_knowledge_queries
+from pwps_agent.tools.knowledge_planning import _user_prompt, plan_knowledge_queries
 
 
 class StaticPlanningClient:
@@ -73,3 +73,36 @@ def test_plan_knowledge_queries_has_targeted_fallback_when_model_returns_empty()
     assert "Q355B" in queries[0]["query_text"]
     assert "GMAW" in queries[0]["query_text"]
     assert queries[0]["target_fields"]
+
+
+def test_knowledge_planning_prompt_includes_quality_refinement_context() -> None:
+    state = create_initial_state("Q355B GMAW plate", "auto_draft")
+    state.quality_report = {
+        "quality_level": "partial",
+        "recommended_action": "refine_search",
+        "field_counts": {},
+        "critical_missing_fields": ["filler_material"],
+        "weak_evidence_fields": ["current_range"],
+        "low_quality_sources": [],
+        "blocked_inference_violations": [],
+        "refinement_focus_fields": ["filler_material", "current_range"],
+        "human_review_fields": [],
+        "target_field_coverage": [],
+        "evidence_quality": {"evidence_count": 1},
+    }
+    state.knowledge_queries = [
+        {
+            "query_id": "kq_001",
+            "query_text": "old filler query",
+            "target_fields": ["filler_material"],
+        }
+    ]
+
+    prompt = _user_prompt(state)
+
+    assert "quality_refinement_focus_fields" in prompt
+    assert "filler_material" in prompt
+    assert "quality_weak_evidence_fields" in prompt
+    assert "current_range" in prompt
+    assert "previous_query_texts" in prompt
+    assert "old filler query" in prompt

@@ -1,9 +1,16 @@
 from pathlib import Path
 
+import pytest
+
 from pwps_agent.cli import build_parser, main
 from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.workflows.auto_draft import AutoDraftResult
+
+
+@pytest.fixture(autouse=True)
+def _isolate_cli_config(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
 
 
 def _fill_minimum_core_fields(state) -> None:

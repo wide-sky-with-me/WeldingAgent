@@ -5,6 +5,7 @@ import pytest
 from pwps_agent.agent.prompt_loader import (
     load_domain_skill,
     load_domain_skill_bundle,
+    load_prompt,
 )
 
 
@@ -31,3 +32,17 @@ def test_load_domain_skill_bundle_formats_ordered_supervisor_context() -> None:
     assert "## Domain Skill: pwps_evidence_handling" in bundle
     assert "## Domain Skill: pwps_risk_review" in bundle
     assert bundle.index("pwps_evidence_handling") < bundle.index("pwps_risk_review")
+
+
+def test_prompt_and_skill_loading_do_not_depend_on_current_working_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    prompt = load_prompt("requirement_understanding")
+    skill = load_domain_skill("pwps_auto_draft")
+
+    assert "welding requirement" in prompt.lower()
+    assert skill.name == "pwps_auto_draft"
+    assert "Domain Skill" in skill.content

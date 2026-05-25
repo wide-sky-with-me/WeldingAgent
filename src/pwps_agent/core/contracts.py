@@ -11,6 +11,7 @@ class AgentAction(BaseModel):
         "CALL_TOOL",
         "UPDATE_STATE",
         "ASK_USER",
+        "VERIFY_DRAFT",
         "COMPOSE_DRAFT",
         "GENERATE_REPORT",
         "FINISH",
@@ -19,8 +20,14 @@ class AgentAction(BaseModel):
     tool_name: str | None = None
     tool_args: dict[str, Any] = Field(default_factory=dict)
     state_patch: dict[str, Any] = Field(default_factory=dict)
-    rationale_summary: str
-    expected_state_change: str | None = None
+    rationale_summary: str = Field(
+        default="Supervisor selected this action without a rationale.",
+        description="Short reason for the selected graph action.",
+    )
+    expected_state_change: str | None = Field(
+        default=None,
+        description="Expected state effect of the selected action.",
+    )
     stop_reason: str | None = None
 
 

@@ -97,6 +97,26 @@ def test_loads_configured_default_interaction_mode(tmp_path: Path) -> None:
     assert settings.workflow.interaction_mode == "guided_confirmation"
 
 
+def test_tavily_advanced_raw_content_settings_from_env(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "TAVILY_SEARCH_DEPTH=advanced",
+                "TAVILY_INCLUDE_RAW_CONTENT=true",
+                "WEB_SEARCH_MAX_RESULTS=8",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(env_file)
+
+    assert settings.web_search.tavily_search_depth == "advanced"
+    assert settings.web_search.tavily_include_raw_content is True
+    assert settings.web_search.max_results == 8
+
+
 def test_openai_aliases_do_not_override_provider_neutral_settings(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(

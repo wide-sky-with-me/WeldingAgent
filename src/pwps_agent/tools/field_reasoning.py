@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from pwps_agent.agent.prompt_loader import load_prompt
 from pwps_agent.core.contracts import Evidence, ToolResult
+from pwps_agent.core.fields import FieldState
 from pwps_agent.core.state import PWPSState
 from pwps_agent.llm.structured import complete_structured
 
@@ -166,8 +167,80 @@ def _field_reasoning_user_prompt(state: PWPSState, evidence: list[Evidence]) -> 
         "Core fields:",
         str(state.core_fields),
         "",
+        "Current field state:",
+        *_field_state_lines(state),
+        "",
+        "Missing fields:",
+        ", ".join(_missing_field_ids(state)) or "none",
+        "",
+        "Planned query target fields:",
+        *_planned_query_lines(state),
+        "",
+        "Quality report focus:",
+        *_quality_focus_lines(state),
+        "",
+        "Blocked inferred fields:",
+        ", ".join(sorted(BLOCKED_INFERRED_FIELDS)),
+        "",
         "Evidence:",
     ]
     for item in evidence:
-        lines.append(f"- {item.evidence_id} [{item.source_type}] {item.content[:1500]}")
+        lines.append(
+            "- "
+            f"{item.evidence_id} "
+            f"[source_type={item.source_type}; source_tier={item.source_tier}; "
+            f"confidence={item.confidence}; source_ref={item.source_ref or 'none'}] "
+            f"{item.content[:1500]}"
+        )
     return "\n".join(lines)
+
+
+def _field_state_lines(state: PWPSState) -> list[str]:
+    return [_field_summary_line(field) for field in state.fields.values()]
+
+
+def _field_summary_line(field: FieldState) -> str:
+    value = field.value if field.value not in (None, "") else "none"
+    return (
+        f"- {field.field_id} ({field.label}; section {field.section}): "
+        f"status={field.status}; value={value}; confidence={field.confidence}; "
+        f"evidence_ids={field.evidence_ids}; candidates={len(field.candidates)}"
+    )
+
+
+def _missing_field_ids(state: PWPSState) -> list[str]:
+    return [
+        field.field_id
+        for field in state.fields.values()
+        if field.status == "missing"
+    ]
+
+
+def _planned_query_lines(state: PWPSState) -> list[str]:
+    if not state.knowledge_queries:
+        return ["- none"]
+    lines = []
+    for query in state.knowledge_queries:
+        query_id = query.get("query_id") or "unknown"
+        purpose = query.get("purpose") or "unspecified"
+        target_fields = ", ".join(query.get("target_fields") or []) or "none"
+        text = query.get("query_text") or query.get("query") or ""
+        lines.append(
+            f"- {query_id}: purpose={purpose}; target_fields={target_fields}; query={text}"
+        )
+    return lines
+
+
+def _quality_focus_lines(state: PWPSState) -> list[str]:
+    if not state.quality_report:
+        return ["- none"]
+    report = state.quality_report
+    focus_fields = ", ".join(report.get("refinement_focus_fields") or []) or "none"
+    critical_missing = ", ".join(report.get("critical_missing_fields") or []) or "none"
+    weak_evidence = ", ".join(report.get("weak_evidence_fields") or []) or "none"
+    return [
+        f"- recommended_action={report.get('recommended_action') or 'unknown'}",
+        f"- refinement_focus_fields={focus_fields}",
+        f"- critical_missing_fields={critical_missing}",
+        f"- weak_evidence_fields={weak_evidence}",
+    ]

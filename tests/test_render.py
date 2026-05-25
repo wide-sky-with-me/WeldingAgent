@@ -88,3 +88,30 @@ def test_render_draft_uses_structured_sections_when_present() -> None:
 
     assert "项目名称" in markdown
     assert "confidence=unknown" in markdown
+
+
+def test_draft_renders_quality_summary_and_limits_missing_noise() -> None:
+    state = create_initial_state(
+        user_input="Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft",
+        interaction_mode="auto_draft",
+        run_id="render_quality",
+    )
+    state.quality_report = {
+        "quality_level": "partial",
+        "recommended_action": "synthesize_with_limitations",
+        "field_counts": {"filled": 7, "candidate": 3, "suggested": 4, "missing": 27},
+        "critical_missing_fields": ["preheat_temperature", "interpass_temperature"],
+        "weak_evidence_fields": ["current_range"],
+        "low_quality_sources": [],
+        "blocked_inference_violations": [],
+        "refinement_focus_fields": [],
+        "target_field_coverage": [],
+        "evidence_quality": {"evidence_count": 4, "by_source_tier": {"webpage": 4}},
+        "notes": ["Refinement attempts exhausted."],
+    }
+
+    draft = render_pwps_draft(state)
+
+    assert "草案质量摘要" in draft
+    assert "preheat_temperature" in draft
+    assert "project_name" not in draft.split("待确认项与风险提示")[-1]

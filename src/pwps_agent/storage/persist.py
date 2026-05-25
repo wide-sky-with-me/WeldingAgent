@@ -27,6 +27,11 @@ def persist_run_artifacts(
         json.dumps(field_report, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    if state.quality_report:
+        (run_dir / "quality_report.json").write_text(
+            json.dumps(state.quality_report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
     (run_dir / "trace.json").write_text(
         json.dumps(state.trace, ensure_ascii=False, indent=2),
         encoding="utf-8",

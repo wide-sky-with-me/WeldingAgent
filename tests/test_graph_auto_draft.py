@@ -5,6 +5,7 @@ from pwps_agent.config import Settings
 from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
 from pwps_agent.core.state import PWPSState, create_initial_state
 from pwps_agent.graph.builder import build_auto_draft_graph
+from pwps_agent.graph.nodes import _mark_model_fallback_fields
 from pwps_agent.graph.state import GraphRuntimeContext
 from pwps_agent.graph.supervisor import plan_next_auto_draft_action
 from pwps_agent.knowledge.local_doc_provider import LocalDocumentProvider
@@ -153,6 +154,46 @@ class StaticReasoningTool:
         )
 
 
+def test_model_fallback_marks_fields_as_suggested_low_confidence() -> None:
+    fields = {
+        "polarity": {
+            "value": "DCEP",
+            "status": "candidate",
+            "confidence": "medium",
+            "evidence_ids": [],
+        }
+    }
+
+    marked = _mark_model_fallback_fields(fields)
+
+    assert marked["polarity"]["status"] == "suggested"
+    assert marked["polarity"]["confidence"] == "low"
+    assert marked["polarity"]["source"]["type"] == "model_fallback"
+    assert marked["polarity"]["confirmation"]["required"] is True
+
+
+def test_model_fallback_drops_blocked_metadata_fields() -> None:
+    fields = {
+        "project_name": {"value": "Bridge Project", "status": "candidate"},
+        "polarity": {"value": "DCEP", "status": "candidate"},
+    }
+
+    marked = _mark_model_fallback_fields(fields)
+
+    assert "project_name" not in marked
+    assert "polarity" in marked
+
+
+class EmptyReasoningTool:
+    def __call__(self, state, evidence, client):
+        return ToolResult(
+            tool_name="field_reasoning",
+            success=True,
+            state_patch={"fields": {}},
+            summary="reasoned no fields",
+        )
+
+
 class PlanningClient:
     def __init__(self):
         self.calls = []
@@ -188,6 +229,12 @@ class PlanningClient:
             ),
             AgentAction(
                 action_type="FINISH",
+                rationale_summary="LLM selected premature finish.",
+                expected_state_change="Mark run done.",
+                stop_reason="llm_planner_test_complete",
+            ),
+            AgentAction(
+                action_type="FINISH",
                 rationale_summary="LLM selected finish.",
                 expected_state_change="Mark run done.",
                 stop_reason="llm_planner_test_complete",
@@ -202,6 +249,13 @@ class PlanningClient:
                 "schema": schema,
             }
         )
+        if not self.actions:
+            return AgentAction(
+                action_type="FINISH",
+                rationale_summary="LLM selected finish after planned actions.",
+                expected_state_change="Mark run done.",
+                stop_reason="llm_planner_test_complete",
+            )
         return self.actions.pop(0)
 
 
@@ -245,35 +299,95 @@ def test_auto_draft_graph_executes_tool_sequence_and_persists_artifacts(tmp_path
     assert (run_dir / "pwps.json").exists()
     assert (run_dir / "pwps_draft.md").exists()
     assert (run_dir / "field_report.json").exists()
+    assert (run_dir / "quality_report.json").exists()
     assert (run_dir / "trace.json").exists()
     persisted_state = PWPSState.model_validate_json(
         (run_dir / "pwps.json").read_text(encoding="utf-8")
     )
     assert persisted_state.status == "done"
-    assert [
+    nodes = [
         entry["node"]
         for entry in final_state.trace
         if entry["node"] != "web_search_query"
-    ] == [
-        "supervisor",
-        "requirement_understanding",
-        "supervisor",
-        "knowledge_planning",
-        "supervisor",
-        "web_search",
-        "supervisor",
-        "field_reasoning",
-        "supervisor",
-        "section_generation",
-        "risk_report",
-        "compose_draft",
-        "supervisor",
-        "finish",
     ]
+    assert nodes.index("draft_verifier") < nodes.index("compose_draft")
+    assert nodes[-2:] == ["supervisor", "finish"]
+    assert {"requirement_understanding", "knowledge_planning", "web_search", "field_reasoning"}.issubset(nodes)
     assert any(entry["node"] == "web_search_query" for entry in final_state.trace)
     assert json.loads((run_dir / "field_report.json").read_text(encoding="utf-8"))[
         "candidate_fields"
     ] == ["shielding_gas"]
+
+
+def test_graph_runs_verifier_before_composing_draft(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=EmptyReasoningTool(),
+    )
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="verify_before_compose",
+    )
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    final_state = result["pwps_state"]
+    nodes = [entry["node"] for entry in final_state.trace]
+    assert "draft_verifier" in nodes
+    assert nodes.index("draft_verifier") < nodes.index("compose_draft")
+    assert final_state.quality_report is not None
+    assert final_state.quality_report["recommended_action"] in {
+        "refine_search",
+        "synthesize_with_limitations",
+    }
+
+
+def test_graph_refines_when_verifier_finds_critical_missing_fields(tmp_path: Path):
+    settings = Settings()
+    settings.paths.output_dir = tmp_path
+    dependencies = AutoDraftDependencies(
+        llm_client=object(),
+        search_provider=StaticSearchProvider(),
+        requirement_tool=StaticRequirementTool(),
+        knowledge_planning_tool=StaticPlanningTool(),
+        field_reasoning_tool=EmptyReasoningTool(),
+    )
+    context = GraphRuntimeContext(
+        settings=settings,
+        dependencies=dependencies,
+        supervisor_planner=ProgressPlanner(settings),
+    )
+    state = create_initial_state(
+        "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft",
+        "auto_draft",
+        run_id="refine_once",
+    )
+    state.max_refinement_attempts = 1
+
+    result = build_auto_draft_graph().invoke({"pwps_state": state, "context": context})
+
+    final_state = result["pwps_state"]
+    assert final_state.refinement_attempts == 1
+    assert final_state.quality_report["recommended_action"] == "synthesize_with_limitations"
+    assert final_state.status == "done"
+    assert [entry["node"] for entry in final_state.trace].count("knowledge_planning") == 2
+    assert any(
+        entry["node"] == "supervisor"
+        and entry["event_type"] == "agent_action"
+        and "refinement" in (entry.get("summary") or "").lower()
+        for entry in final_state.trace
+    )
 
 
 def test_run_graph_auto_draft_service_invokes_graph_and_persists_artifacts(tmp_path: Path):
@@ -300,6 +414,7 @@ def test_run_graph_auto_draft_service_invokes_graph_and_persists_artifacts(tmp_p
     assert (run_dir / "pwps.json").exists()
     assert (run_dir / "pwps_draft.md").exists()
     assert (run_dir / "field_report.json").exists()
+    assert (run_dir / "quality_report.json").exists()
     assert (run_dir / "trace.json").exists()
     assert (run_dir / "evidence_index.json").exists()
     assert any(
@@ -332,7 +447,7 @@ def test_run_graph_auto_draft_can_use_llm_supervisor_planner_from_settings(tmp_p
     )
 
     assert result.state.status == "done"
-    assert len(planning_client.calls) == 6
+    assert len(planning_client.calls) >= 7
     assert all(call["schema"] is AgentAction for call in planning_client.calls)
     supervisor_events = [
         entry for entry in result.state.trace if entry["node"] == "supervisor"
@@ -486,7 +601,7 @@ def test_graph_marks_model_fallback_fields_as_suggested_without_external_evidenc
     field = final_state.fields["shielding_gas"]
     assert final_state.status == "done"
     assert field.status == "suggested"
-    assert field.source["type"] == "llm"
+    assert field.source["type"] == "model_fallback"
     assert field.source["evidence_ids"] == []
     assert field.confirmation == {"required": True, "confirmed": False}
     assert any(

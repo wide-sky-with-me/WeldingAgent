@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from pwps_agent.core.contracts import Evidence, SearchResult
 
+LOW_QUALITY_SOURCE_MARKERS = (
+    "facebook.com",
+    "instagram.com",
+    "scribd.com",
+    "myshopify.com",
+    "/forum/",
+    "topic_show",
+)
+
 
 def search_results_to_evidence(results: list[SearchResult]) -> list[Evidence]:
     evidence: list[Evidence] = []
@@ -27,6 +36,13 @@ def search_results_to_evidence(results: list[SearchResult]) -> list[Evidence]:
             )
         )
     return evidence
+
+
+def is_low_quality_source_ref(source_ref: str | None) -> bool:
+    if not source_ref:
+        return False
+    lowered = source_ref.lower()
+    return any(marker in lowered for marker in LOW_QUALITY_SOURCE_MARKERS)
 
 
 def _classify_source(result: SearchResult) -> tuple[str, str]:
