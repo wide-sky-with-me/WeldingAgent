@@ -23,6 +23,14 @@ def _fill_minimum_core_fields(state) -> None:
 def test_cli_parser_accepts_auto_draft_requirement_and_output_dir(tmp_path: Path) -> None:
     parser = build_parser()
 
+    draft_args = parser.parse_args(
+        [
+            "draft",
+            "Q355B 12mm GMAW pWPS",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
     args = parser.parse_args(
         [
             "auto-draft",
@@ -32,6 +40,9 @@ def test_cli_parser_accepts_auto_draft_requirement_and_output_dir(tmp_path: Path
         ]
     )
 
+    assert draft_args.command == "draft"
+    assert draft_args.requirement == "Q355B 12mm GMAW pWPS"
+    assert draft_args.output_dir == tmp_path
     assert args.command == "auto-draft"
     assert args.requirement == "Q355B 12mm GMAW pWPS"
     assert args.output_dir == tmp_path
@@ -298,6 +309,59 @@ def test_cli_auto_draft_uses_graph_runtime_by_default(monkeypatch, tmp_path: Pat
         "requirement": "Q355B 12mm GMAW pWPS",
         "output_dir": tmp_path,
         "run_id": "cli_graph_default",
+    }
+
+
+def test_cli_draft_uses_configured_interaction_mode(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    calls = {}
+
+    def fake_load_settings():
+        from pwps_agent.config import Settings
+
+        settings = Settings()
+        settings.workflow.interaction_mode = "guided_confirmation"
+        return settings
+
+    def fake_run_graph_guided_draft(requirement, settings, run_id):
+        calls["requirement"] = requirement
+        calls["mode"] = settings.workflow.interaction_mode
+        calls["output_dir"] = settings.paths.output_dir
+        calls["run_id"] = run_id
+        state = create_initial_state(requirement, "guided_confirmation", run_id=run_id)
+        state.status = "need_user_input"
+        return AutoDraftResult(state=state, output_dir=str(tmp_path / run_id))
+
+    monkeypatch.setattr("pwps_agent.cli.load_settings", fake_load_settings)
+    monkeypatch.setattr(
+        "pwps_agent.cli.run_graph_guided_draft",
+        fake_run_graph_guided_draft,
+        raising=False,
+    )
+
+    exit_code = main(
+        [
+            "draft",
+            "Q355B 12mm GMAW pWPS",
+            "--output-dir",
+            str(tmp_path),
+            "--run-id",
+            "configured_guided",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert str(tmp_path / "configured_guided") in captured.out
+    assert "mode=guided_confirmation" in captured.err
+    assert calls == {
+        "requirement": "Q355B 12mm GMAW pWPS",
+        "mode": "guided_confirmation",
+        "output_dir": tmp_path,
+        "run_id": "configured_guided",
     }
 
 

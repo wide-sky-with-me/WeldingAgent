@@ -77,6 +77,10 @@ Interaction mode behavior:
 - `auto_draft`: autonomous draft generation. The Supervisor should not pause to ask the user; it searches configured sources, uses model fallback only as low-confidence suggestions, and finishes with uncertainty visible.
 - `guided_confirmation`: human-in-the-loop refinement. The Supervisor pauses on missing core inputs and unconfirmed candidate/suggested/conflict fields, presenting options and evidence so the user can confirm, modify, or defer each group.
 
+Use `pwps-agent draft` to read the default mode from `PWPS_INTERACTION_MODE`.
+Use `pwps-agent auto-draft` or `pwps-agent guided-draft` when a run should
+override the configured default explicitly.
+
 Web search:
 
 ```text
@@ -95,6 +99,7 @@ Runtime paths:
 
 ```text
 KNOWLEDGE_SOURCES=local_doc,web
+PWPS_INTERACTION_MODE=auto_draft
 PWPS_LOCAL_DOCS_DIR=data/local_docs
 PWPS_OUTPUT_DIR=data/outputs
 LOCAL_DOC_MAX_RESULTS=5
@@ -105,10 +110,10 @@ Local documents can be `.md`, `.markdown`, or `.txt` files. If no local knowledg
 
 ## Quick Start
 
-Run a real auto-draft smoke:
+Run a configured-mode smoke:
 
 ```bash
-uv run pwps-agent auto-draft \
+uv run pwps-agent draft \
   "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" \
   --output-dir /tmp/pwps-agent-demo \
   --run-id demo_q355b_gmaw
@@ -136,6 +141,17 @@ uv run python -c "from pathlib import Path; from pwps_agent.core.state import PW
 ## CLI Commands
 
 ### Auto Draft
+
+Configured default mode:
+
+```bash
+uv run pwps-agent draft \
+  "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" \
+  --output-dir /tmp/pwps-agent-demo \
+  --run-id demo_configured
+```
+
+Explicit auto mode:
 
 ```bash
 uv run pwps-agent auto-draft \

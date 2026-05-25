@@ -58,6 +58,10 @@ class KnowledgeSettings(BaseModel):
         return "model" in self.sources
 
 
+class WorkflowSettings(BaseModel):
+    interaction_mode: Literal["auto_draft", "guided_confirmation"] = "auto_draft"
+
+
 class PathSettings(BaseModel):
     local_docs_dir: Path = Path("data/local_docs")
     output_dir: Path = Path("data/outputs")
@@ -69,6 +73,7 @@ class Settings(BaseModel):
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
     local_docs: LocalDocSettings = Field(default_factory=LocalDocSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
+    workflow: WorkflowSettings = Field(default_factory=WorkflowSettings)
     paths: PathSettings = Field(default_factory=PathSettings)
 
 
@@ -110,6 +115,9 @@ def load_settings(env_file: str | Path = ".env") -> Settings:
         ),
         knowledge=KnowledgeSettings(
             sources=_knowledge_sources(values.get("KNOWLEDGE_SOURCES")),
+        ),
+        workflow=WorkflowSettings(
+            interaction_mode=values.get("PWPS_INTERACTION_MODE", "auto_draft"),
         ),
         paths=PathSettings(
             local_docs_dir=Path(values.get("PWPS_LOCAL_DOCS_DIR", "data/local_docs")),

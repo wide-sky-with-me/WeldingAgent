@@ -15,6 +15,7 @@ EXPECTED_ENV_TEMPLATE_KEYS = {
     "OPENAI_BASE_URL",
     "OPENAI_MODEL",
     "KNOWLEDGE_SOURCES",
+    "PWPS_INTERACTION_MODE",
     "WEB_SEARCH_PROVIDER",
     "WEB_SEARCH_MAX_RESULTS",
     "WEB_SEARCH_TIMEOUT_SECONDS",
@@ -85,6 +86,15 @@ def test_loads_configured_knowledge_source_order(tmp_path: Path) -> None:
     assert settings.knowledge.local_doc_enabled is False
     assert settings.knowledge.web_enabled is True
     assert settings.knowledge.model_fallback_enabled is True
+
+
+def test_loads_configured_default_interaction_mode(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("PWPS_INTERACTION_MODE=guided_confirmation\n", encoding="utf-8")
+
+    settings = load_settings(env_file)
+
+    assert settings.workflow.interaction_mode == "guided_confirmation"
 
 
 def test_openai_aliases_do_not_override_provider_neutral_settings(tmp_path: Path) -> None:

@@ -75,6 +75,10 @@ LLM_THINKING_TYPE=disabled
 - `auto_draft`：自动草稿模式。Supervisor 不应暂停询问用户，而是按配置检索本地/网络来源；模型兜底只能生成低置信度 `suggested` 值，并在不确定性可见的前提下完成草稿。
 - `guided_confirmation`：人机协同确认模式。Supervisor 会在关键输入缺失、候选/建议/冲突字段未确认时暂停，给出选项、依据和解释，引导用户确认、修改或暂缓。
 
+使用 `pwps-agent draft` 时会读取 `PWPS_INTERACTION_MODE` 作为默认工作模式。
+如果某次运行要显式覆盖默认值，则使用 `pwps-agent auto-draft` 或
+`pwps-agent guided-draft`。
+
 网络搜索配置示例：
 
 ```text
@@ -93,6 +97,7 @@ BRAVE_SEARCH_API_KEY=...
 
 ```text
 KNOWLEDGE_SOURCES=local_doc,web
+PWPS_INTERACTION_MODE=auto_draft
 PWPS_LOCAL_DOCS_DIR=data/local_docs
 PWPS_OUTPUT_DIR=data/outputs
 LOCAL_DOC_MAX_RESULTS=5
@@ -103,10 +108,10 @@ LOCAL_DOC_SNIPPET_CHARS=420
 
 ## 快速运行
 
-执行一次真实 auto-draft smoke：
+执行一次按配置工作模式运行的 smoke：
 
 ```bash
-uv run pwps-agent auto-draft \
+uv run pwps-agent draft \
   "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" \
   --output-dir /tmp/pwps-agent-demo \
   --run-id demo_q355b_gmaw
@@ -134,6 +139,17 @@ uv run python -c "from pathlib import Path; from pwps_agent.core.state import PW
 ## CLI 命令
 
 ### 自动生成草案
+
+按配置默认模式运行：
+
+```bash
+uv run pwps-agent draft \
+  "Q355B 12mm plate GMAW butt joint flat position AWS D1.1 pWPS draft" \
+  --output-dir /tmp/pwps-agent-demo \
+  --run-id demo_configured
+```
+
+显式自动模式：
 
 ```bash
 uv run pwps-agent auto-draft \

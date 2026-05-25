@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pwps-agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    draft = subparsers.add_parser("draft")
+    draft.add_argument("requirement")
+    draft.add_argument("--output-dir", type=Path, default=None)
+    draft.add_argument("--run-id", default="run_cli")
+
     auto_draft = subparsers.add_parser("auto-draft")
     auto_draft.add_argument("requirement")
     auto_draft.add_argument("--output-dir", type=Path, default=None)
@@ -92,6 +97,44 @@ def main(argv: list[str] | None = None) -> int:
     _configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "draft":
+        settings = load_settings()
+        if args.output_dir is not None:
+            settings.paths.output_dir = args.output_dir
+        LOGGER.info(
+            "Starting draft run_id=%s mode=%s planner=%s output_dir=%s",
+            args.run_id,
+            settings.workflow.interaction_mode,
+            "llm",
+            settings.paths.output_dir,
+        )
+        try:
+            if settings.workflow.interaction_mode == "guided_confirmation":
+                result = run_graph_guided_draft(
+                    args.requirement,
+                    settings=settings,
+                    run_id=args.run_id,
+                )
+            else:
+                result = run_graph_auto_draft(
+                    args.requirement,
+                    settings=settings,
+                    run_id=args.run_id,
+                )
+        except Exception as exc:
+            LOGGER.error("Draft failed run_id=%s error=%s", args.run_id, exc)
+            print(f"pwps-agent: {exc}", file=sys.stderr)
+            return 1
+        LOGGER.info(
+            "Completed draft run_id=%s mode=%s status=%s output_dir=%s",
+            args.run_id,
+            result.state.interaction_mode,
+            result.state.status,
+            result.output_dir,
+        )
+        print(result.output_dir)
+        return 0
 
     if args.command == "auto-draft":
         settings = load_settings()
