@@ -57,7 +57,7 @@ uv sync
 
 ## Configuration
 
-Create `.env` in the repository root. Do not commit secrets.
+Copy `.env.template` to `.env` in the repository root, then fill in credentials. Do not commit secrets.
 
 Minimal LLM configuration:
 
