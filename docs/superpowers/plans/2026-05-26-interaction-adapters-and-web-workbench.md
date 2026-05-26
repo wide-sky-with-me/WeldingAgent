@@ -41,7 +41,7 @@
 - Create: `src/pwps_agent/interaction/normalizer.py`
 - Test: `tests/test_interaction_normalizer.py`
 
-- [ ] **Step 1: Write failing normalizer tests**
+- [x] **Step 1: Write failing normalizer tests**
 
 Create `tests/test_interaction_normalizer.py`:
 
@@ -117,7 +117,7 @@ def test_normalizer_preserves_free_text_for_llm_followup() -> None:
     assert payload["unresolved_text"] == "我觉得用常规气保焊焊丝就行，但是型号不确定"
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -127,7 +127,7 @@ uv run pytest tests/test_interaction_normalizer.py -q
 
 Expected: fail because `pwps_agent.interaction.normalizer` does not exist.
 
-- [ ] **Step 3: Implement deterministic normalizer**
+- [x] **Step 3: Implement deterministic normalizer**
 
 Create `src/pwps_agent/interaction/__init__.py`:
 
@@ -240,7 +240,7 @@ def _evidence_ids(option: dict[str, Any]) -> list[str]:
     return [str(evidence_id) for evidence_id in option.get("evidence_ids") or []]
 ```
 
-- [ ] **Step 4: Run normalizer tests**
+- [x] **Step 4: Run normalizer tests**
 
 Run:
 
@@ -250,12 +250,31 @@ uv run pytest tests/test_interaction_normalizer.py -q
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pwps_agent/interaction tests/test_interaction_normalizer.py
 git commit -m "feat: add interaction response normalizer"
 ```
+
+Task 1 completed with follow-up quality fixes:
+
+```bash
+uv run pytest tests/test_interaction_normalizer.py -q
+9 passed
+
+uv run pytest tests/test_interaction_normalizer.py tests/test_interaction_resume.py tests/test_guided_confirmation_resume.py -q
+17 passed
+
+uv run pytest -q
+181 passed
+```
+
+Review notes resolved:
+- Normalizer emits resume-compatible `accepted` / `modified` actions.
+- Numeric shorthand resolves only when one option-bearing question exists.
+- Exact option label/value resolves only when the match is unique.
+- Exact numeric option values are preferred over numeric index shorthand.
 
 ---
 
