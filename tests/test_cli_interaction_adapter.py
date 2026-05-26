@@ -6,6 +6,7 @@ from pwps_agent.interaction.terminal import (
     collect_terminal_response,
     render_terminal_interaction,
 )
+from pwps_agent.interaction.runtime import collect_terminal_payload
 
 
 def _interaction() -> dict:
@@ -38,6 +39,44 @@ def _interaction() -> dict:
     }
 
 
+def _multi_question_interaction() -> dict:
+    return {
+        "request_id": "run1:guided_field_confirmation:1",
+        "title": "Confirm welding choices",
+        "summary": "Review the proposed candidates.",
+        "questions": [
+            {
+                "question_id": "confirm_filler_material",
+                "field_ids": ["filler_material"],
+                "prompt": "Confirm filler material.",
+                "input_kind": "single_choice",
+                "options": [
+                    {
+                        "value": "ER50-6",
+                        "label": "ER50-6 solid wire",
+                        "field_updates": {"filler_material": "ER50-6"},
+                        "evidence_ids": ["ev_filler"],
+                    }
+                ],
+            },
+            {
+                "question_id": "confirm_shielding_gas",
+                "field_ids": ["shielding_gas"],
+                "prompt": "Confirm shielding gas.",
+                "input_kind": "single_choice",
+                "options": [
+                    {
+                        "value": "80% Ar / 20% CO2",
+                        "label": "80/20 gas",
+                        "field_updates": {"shielding_gas": "80% Ar / 20% CO2"},
+                        "evidence_ids": ["ev_gas"],
+                    }
+                ],
+            },
+        ],
+    }
+
+
 def test_render_terminal_interaction_includes_prompt_and_option_details() -> None:
     text = render_terminal_interaction(_interaction())
 
@@ -58,3 +97,26 @@ def test_collect_terminal_response_prints_interaction_and_returns_raw_line() -> 
     assert response == "1"
     assert "Confirm welding choices" in stdout.getvalue()
     assert "请输入选项编号或 field=value" in stdout.getvalue()
+
+
+def test_collect_terminal_payload_normalizes_multi_question_answers() -> None:
+    stdout = StringIO()
+    payload = collect_terminal_payload(
+        _multi_question_interaction(),
+        StringIO("1\n1\n"),
+        stdout,
+    )
+
+    assert payload["request_id"] == "run1:guided_field_confirmation:1"
+    assert payload["fields"] == {
+        "filler_material": "ER50-6",
+        "shielding_gas": "80% Ar / 20% CO2",
+    }
+    assert [option["question_id"] for option in payload["selected_options"]] == [
+        "confirm_filler_material",
+        "confirm_shielding_gas",
+    ]
+    assert payload["evidence_ids_shown"] == ["ev_filler", "ev_gas"]
+    assert payload["message"] == "1\n1"
+    assert "Confirm filler material." in stdout.getvalue()
+    assert "Confirm shielding gas." in stdout.getvalue()
