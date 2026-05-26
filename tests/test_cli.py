@@ -453,10 +453,13 @@ def test_cli_auto_draft_prompts_inline_for_initial_context(
         return InteractionResumeResult(state=resumed, output_dir=str(tmp_path / state.run_id))
 
     monkeypatch.setattr("pwps_agent.cli.run_graph_auto_draft", fake_run_graph_auto_draft, raising=False)
-    monkeypatch.setattr("pwps_agent.cli.resume_interaction", fake_resume_interaction)
+    monkeypatch.setattr("pwps_agent.interaction.runtime.resume_interaction", fake_resume_interaction)
     monkeypatch.setattr(
         "sys.stdin",
-        InteractiveInput("Q355B\n12mm\nplate\nGMAW\nbutt joint\nflat\n"),
+        InteractiveInput(
+            "base_material=Q355B, thickness=12mm, workpiece_type=plate, "
+            "welding_process=GMAW, joint_type=butt joint, welding_position=flat\n"
+        ),
     )
 
     exit_code = main(
@@ -520,7 +523,7 @@ def test_cli_guided_draft_prompts_inline_with_recommendations(
         return InteractionResumeResult(state=resumed, output_dir=str(tmp_path / state.run_id))
 
     monkeypatch.setattr("pwps_agent.cli.run_graph_guided_draft", fake_run_graph_guided_draft, raising=False)
-    monkeypatch.setattr("pwps_agent.cli.resume_interaction", fake_resume_interaction)
+    monkeypatch.setattr("pwps_agent.interaction.runtime.resume_interaction", fake_resume_interaction)
     monkeypatch.setattr("sys.stdin", InteractiveInput("1\n"))
 
     exit_code = main(

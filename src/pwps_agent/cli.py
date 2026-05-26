@@ -5,7 +5,6 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, TextIO
 
 from pwps_agent.config import load_settings
 from pwps_agent.core.modes import (
@@ -14,6 +13,7 @@ from pwps_agent.core.modes import (
     edit_confirmation,
     rollback_confirmation,
 )
+from pwps_agent.interaction.runtime import continue_interactive_run
 from pwps_agent.web.guided_confirmation import load_state, save_state, serve_guided_confirmation
 from pwps_agent.workflows.guided_confirmation import (
     resume_guided_confirmation,
@@ -25,7 +25,6 @@ from pwps_agent.workflows.supplement_update import (
     resume_supplement_update_from_checkpoint,
 )
 from pwps_agent.workflows.auto_draft import (
-    AutoDraftResult,
     run_graph_auto_draft,
     run_graph_guided_draft,
 )
@@ -136,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
                     settings=settings,
                     run_id=args.run_id,
                 )
-            result = _continue_interactive_run(result, settings)
+            result = continue_interactive_run(result, settings)
         except Exception as exc:
             LOGGER.error("Draft failed run_id=%s error=%s", args.run_id, exc)
             print(f"pwps-agent: {exc}", file=sys.stderr)
@@ -167,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
                 settings=settings,
                 run_id=args.run_id,
             )
-            result = _continue_interactive_run(result, settings)
+            result = continue_interactive_run(result, settings)
         except Exception as exc:
             LOGGER.error("Auto-draft failed run_id=%s error=%s", args.run_id, exc)
             print(f"pwps-agent: {exc}", file=sys.stderr)
@@ -197,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
                 settings=settings,
                 run_id=args.run_id,
             )
-            result = _continue_interactive_run(result, settings)
+            result = continue_interactive_run(result, settings)
         except Exception as exc:
             LOGGER.error("Guided-draft failed run_id=%s error=%s", args.run_id, exc)
             print(f"pwps-agent: {exc}", file=sys.stderr)
@@ -392,176 +391,6 @@ def _parse_set_values(values: list[str]) -> dict[str, str]:
     if not parsed:
         raise ValueError("At least one --set field=value is required.")
     return parsed
-
-
-def _continue_interactive_run(result: AutoDraftResult, settings) -> AutoDraftResult:
-    if not _should_prompt_inline(result.state):
-        return result
-
-    current = result
-    while _should_prompt_inline(current.state):
-        payload = _read_interaction_payload(current.state.pending_interaction or {})
-        current = resume_interaction(current.state, payload, settings=settings)
-    return AutoDraftResult(state=current.state, output_dir=current.output_dir)
-
-
-def _should_prompt_inline(state) -> bool:
-    return (
-        state.status == "need_user_input"
-        and bool(state.pending_interaction)
-        and sys.stdin.isatty()
-    )
-
-
-def _read_interaction_payload(
-    interaction: dict[str, Any],
-    *,
-    stdin: TextIO | None = None,
-    stdout: TextIO | None = None,
-) -> dict[str, Any]:
-    stdin = stdin or sys.stdin
-    stdout = stdout or sys.stdout
-    print("", file=stdout)
-    print(f"[需要用户输入] {interaction.get('title', 'Runtime interaction')}", file=stdout)
-    summary = interaction.get("summary")
-    if summary:
-        print(str(summary), file=stdout)
-
-    fields: dict[str, str] = {}
-    evidence_ids: list[str] = []
-    messages: list[str] = []
-    for question in interaction.get("questions", []):
-        question_payload = _prompt_for_question(question, stdin=stdin, stdout=stdout)
-        fields.update(question_payload["fields"])
-        evidence_ids.extend(question_payload["evidence_ids"])
-        if question_payload["message"]:
-            messages.append(question_payload["message"])
-
-    if not fields:
-        raise ValueError("Runtime interaction requires at least one field value.")
-
-    return {
-        "fields": fields,
-        "message": "\n".join(messages) or "User runtime interaction response.",
-        "reason": "Collected inline from interactive CLI.",
-        "evidence_ids_shown": evidence_ids,
-        "action": "accepted",
-    }
-
-
-def _prompt_for_question(
-    question: dict[str, Any],
-    *,
-    stdin: TextIO,
-    stdout: TextIO,
-) -> dict[str, Any]:
-    prompt = str(question.get("prompt") or "Please provide input.")
-    input_kind = question.get("input_kind")
-    options = list(question.get("options") or [])
-    field_ids = [str(field_id) for field_id in question.get("field_ids", [])]
-
-    print("", file=stdout)
-    print(prompt, file=stdout)
-    if options:
-        _print_options(options, stdout=stdout)
-        selected = _read_required_line("选择编号或直接输入值: ", stdin=stdin, stdout=stdout)
-        fields, evidence_ids, message = _fields_from_option_input(
-            selected,
-            options,
-            field_ids,
-        )
-        return {
-            "fields": fields,
-            "evidence_ids": evidence_ids,
-            "message": message,
-        }
-
-    if input_kind == "free_text" and len(field_ids) > 1:
-        fields = {}
-        messages = []
-        for field_id in field_ids:
-            value = _read_required_line(f"{field_id}: ", stdin=stdin, stdout=stdout)
-            fields[field_id] = value
-            messages.append(f"{field_id}={value}")
-        return {"fields": fields, "evidence_ids": [], "message": "; ".join(messages)}
-
-    field_id = field_ids[0] if field_ids else "user_response"
-    value = _read_required_line(f"{field_id}: ", stdin=stdin, stdout=stdout)
-    return {
-        "fields": {field_id: value},
-        "evidence_ids": [],
-        "message": f"{field_id}={value}",
-    }
-
-
-def _print_options(options: list[dict[str, Any]], *, stdout: TextIO) -> None:
-    for index, option in enumerate(options, start=1):
-        marker = " [推荐]" if option.get("recommended") else ""
-        label = option.get("label") or option.get("value")
-        print(f"{index}. {label}{marker}", file=stdout)
-        suitability = option.get("suitability")
-        if suitability:
-            print(f"   适用性: {suitability}", file=stdout)
-        risk_note = option.get("risk_note")
-        if risk_note:
-            print(f"   风险: {risk_note}", file=stdout)
-
-
-def _fields_from_option_input(
-    selected: str,
-    options: list[dict[str, Any]],
-    field_ids: list[str],
-) -> tuple[dict[str, str], list[str], str]:
-    if selected.isdigit():
-        index = int(selected)
-        if not 1 <= index <= len(options):
-            raise ValueError(f"Selection out of range: {selected}")
-        option = options[index - 1]
-        field_updates = {
-            str(field_id): str(value)
-            for field_id, value in dict(option.get("field_updates") or {}).items()
-            if value not in (None, "")
-        }
-        if not field_updates and field_ids:
-            field_updates[field_ids[0]] = str(option.get("value"))
-        return (
-            field_updates,
-            [str(evidence_id) for evidence_id in option.get("evidence_ids", [])],
-            f"selected option {index}: {option.get('label') or option.get('value')}",
-        )
-
-    if "=" in selected:
-        return _parse_inline_field_values(selected), [], selected
-
-    if not field_ids:
-        raise ValueError("Free-form option input requires a target field.")
-    return {field_ids[0]: selected}, [], f"{field_ids[0]}={selected}"
-
-
-def _parse_inline_field_values(value: str) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    for part in value.split(","):
-        if "=" not in part:
-            raise ValueError(f"Expected field=value pair: {part}")
-        field_id, field_value = part.split("=", 1)
-        field_id = field_id.strip()
-        field_value = field_value.strip()
-        if not field_id or not field_value:
-            raise ValueError(f"Expected non-empty field=value pair: {part}")
-        fields[field_id] = field_value
-    return fields
-
-
-def _read_required_line(prompt: str, *, stdin: TextIO, stdout: TextIO) -> str:
-    while True:
-        print(prompt, end="", flush=True, file=stdout)
-        value = stdin.readline()
-        if value == "":
-            raise EOFError("Input ended while waiting for runtime interaction response.")
-        value = value.strip()
-        if value:
-            return value
-        print("不能为空。", file=stdout)
 
 
 def _configure_logging() -> None:
