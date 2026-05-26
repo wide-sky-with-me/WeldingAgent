@@ -1372,7 +1372,7 @@ uv run pytest tests/test_guided_confirmation_web.py tests/test_web_runtime_api.p
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pwps_agent/web/guided_confirmation.py tests/test_guided_confirmation_web.py docs/architecture.md AGENTS.md docs/superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md
