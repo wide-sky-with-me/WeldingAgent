@@ -15,17 +15,13 @@ from pwps_agent.workflows.guided_confirmation import (
     resume_guided_confirmation,
     resume_guided_confirmation_from_checkpoint,
 )
+from pwps_agent.web.runtime_api import build_run_snapshot
 
 
 def web_state_payload(state: PWPSState) -> dict[str, Any]:
     return {
-        "run_id": state.run_id,
-        "status": state.status,
-        "interaction_mode": state.interaction_mode,
+        **build_run_snapshot(state, Path(".") / state.run_id),
         "confirmation_view": build_confirmation_view(state),
-        "confirmations": [record.model_dump() for record in state.confirmations],
-        "has_draft": bool(state.draft_markdown),
-        "field_report": state.field_report,
     }
 
 
