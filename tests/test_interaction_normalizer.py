@@ -180,6 +180,50 @@ def test_multi_question_numeric_option_input_remains_unresolved():
     assert payload["unresolved_text"] == "1"
 
 
+def test_duplicate_exact_option_label_or_value_remains_unresolved():
+    interaction = InteractionRequest(
+        request_id="run1:guided_field_confirmation:3",
+        interaction_mode="guided_confirmation",
+        purpose="guided_field_confirmation",
+        title="Confirm thermal controls",
+        summary="Choose candidates.",
+        questions=[
+            InteractionQuestion(
+                question_id="confirm_preheat_temperature",
+                field_ids=["preheat_temperature"],
+                prompt="Confirm preheat.",
+                input_kind="single_choice",
+                options=[
+                    InteractionOption(
+                        value="not required",
+                        label="not required",
+                        field_updates={"preheat_temperature": "not required"},
+                    )
+                ],
+            ),
+            InteractionQuestion(
+                question_id="confirm_pwht",
+                field_ids=["pwht"],
+                prompt="Confirm PWHT.",
+                input_kind="single_choice",
+                options=[
+                    InteractionOption(
+                        value="not required",
+                        label="not required",
+                        field_updates={"pwht": "not required"},
+                    )
+                ],
+            ),
+        ],
+    ).model_dump()
+
+    payload = normalize_interaction_response(interaction, "not required")
+
+    assert payload["fields"] == {}
+    assert payload["selected_options"] == []
+    assert payload["unresolved_text"] == "not required"
+
+
 def test_free_form_text_remains_unresolved_without_fields():
     payload = normalize_interaction_response(
         _guided_interaction(),

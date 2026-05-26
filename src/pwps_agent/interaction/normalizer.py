@@ -124,15 +124,19 @@ def _match_option(
             return _selection(question, options[target_index - 1], target_index)
         return None
 
+    matches: list[tuple[dict[str, Any], dict[str, Any], int]] = []
     for question in _questions(interaction):
         for index, option in enumerate(question.get("options") or [], start=1):
             value = option.get("value")
             label = option.get("label")
-            if value is not None and raw_text == str(value):
-                return _selection(question, option, index)
-            if label is not None and raw_text == str(label):
-                return _selection(question, option, index)
-    return None
+            value_matches = value is not None and raw_text == str(value)
+            label_matches = label is not None and raw_text == str(label)
+            if value_matches or label_matches:
+                matches.append((question, option, index))
+    if len(matches) != 1:
+        return None
+    question, option, index = matches[0]
+    return _selection(question, option, index)
 
 
 def _selection(
