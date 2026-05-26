@@ -1129,7 +1129,7 @@ vite v7.3.3 building client environment for production...
 - Modify: `src/pwps_agent/cli.py`
 - Modify: `tests/test_web_runtime_api.py`
 
-- [ ] **Step 1: Write server behavior tests**
+- [x] **Step 1: Write server behavior tests**
 
 Append to `tests/test_web_runtime_api.py`:
 
@@ -1143,7 +1143,7 @@ def test_static_asset_path_serves_react_index() -> None:
     assert path.name == "index.html"
 ```
 
-- [ ] **Step 2: Implement static asset resolver and server entrypoint**
+- [x] **Step 2: Implement static asset resolver and server entrypoint**
 
 Modify `src/pwps_agent/web/runtime_api.py`:
 
@@ -1219,7 +1219,7 @@ def _content_type(path: Path) -> str:
     return "application/octet-stream"
 ```
 
-- [ ] **Step 3: Wire CLI command**
+- [x] **Step 3: Wire CLI command**
 
 Modify `src/pwps_agent/cli.py`:
 
@@ -1252,7 +1252,7 @@ if args.command == "web-workbench":
         return 1
 ```
 
-- [ ] **Step 4: Run server/API tests**
+- [x] **Step 4: Run server/API tests**
 
 Run:
 
@@ -1262,11 +1262,24 @@ uv run pytest tests/test_web_runtime_api.py tests/test_cli.py -q
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pwps_agent/web/runtime_api.py src/pwps_agent/cli.py tests/test_web_runtime_api.py tests/test_cli.py
 git commit -m "feat: serve react workbench from runtime api"
+```
+
+Task 5 completed:
+
+```bash
+uv run pytest tests/test_web_runtime_api.py tests/test_cli.py -q
+23 passed
+
+uv run pytest tests/test_guided_confirmation_web.py -q
+5 passed
+
+python -m py_compile src/pwps_agent/web/runtime_api.py src/pwps_agent/cli.py
+passed
 ```
 
 ---
