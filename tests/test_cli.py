@@ -1,11 +1,19 @@
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
 from pwps_agent.cli import build_parser, main
+from pwps_agent.core.interaction import (
+    attach_interaction_request,
+    build_guided_confirmation_request,
+    build_initial_info_request,
+)
+from pwps_agent.core.modes import build_confirmation_view
 from pwps_agent.core.state import create_initial_state
 from pwps_agent.graph.checkpoints import save_checkpoint
 from pwps_agent.workflows.auto_draft import AutoDraftResult
+from pwps_agent.workflows.interaction_resume import InteractionResumeResult
 
 
 @pytest.fixture(autouse=True)
@@ -25,6 +33,11 @@ def _fill_minimum_core_fields(state) -> None:
     }.items():
         state.fields[field_id].value = value
         state.fields[field_id].status = "filled"
+
+
+class InteractiveInput(StringIO):
+    def isatty(self) -> bool:
+        return True
 
 
 def test_cli_parser_accepts_auto_draft_requirement_and_output_dir(tmp_path: Path) -> None:
@@ -417,6 +430,115 @@ def test_cli_auto_draft_emits_progress_logs(monkeypatch, tmp_path: Path, capsys)
     assert exit_code == 0
     assert "Starting auto-draft run_id=cli_logs" in captured.err
     assert "Completed auto-draft run_id=cli_logs" in captured.err
+
+
+def test_cli_auto_draft_prompts_inline_for_initial_context(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    calls = {}
+
+    def fake_run_graph_auto_draft(requirement, settings, run_id):
+        state = create_initial_state(requirement, "auto_draft", run_id=run_id)
+        state.status = "need_user_input"
+        attach_interaction_request(state, build_initial_info_request(state))
+        return AutoDraftResult(state=state, output_dir=str(tmp_path / run_id))
+
+    def fake_resume_interaction(state, payload, settings):
+        calls["payload"] = payload
+        resumed = state.model_copy(deep=True)
+        resumed.status = "done"
+        resumed.pending_interaction = None
+        return InteractionResumeResult(state=resumed, output_dir=str(tmp_path / state.run_id))
+
+    monkeypatch.setattr("pwps_agent.cli.run_graph_auto_draft", fake_run_graph_auto_draft, raising=False)
+    monkeypatch.setattr("pwps_agent.cli.resume_interaction", fake_resume_interaction)
+    monkeypatch.setattr(
+        "sys.stdin",
+        InteractiveInput("Q355B\n12mm\nplate\nGMAW\nbutt joint\nflat\n"),
+    )
+
+    exit_code = main(
+        [
+            "auto-draft",
+            "make a pWPS",
+            "--output-dir",
+            str(tmp_path),
+            "--run-id",
+            "inline_auto",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "[需要用户输入]" in captured.out
+    assert "base_material" in captured.out
+    assert calls["payload"]["fields"] == {
+        "base_material": "Q355B",
+        "thickness": "12mm",
+        "workpiece_type": "plate",
+        "welding_process": "GMAW",
+        "joint_type": "butt joint",
+        "welding_position": "flat",
+    }
+    assert str(tmp_path / "inline_auto") in captured.out
+
+
+def test_cli_guided_draft_prompts_inline_with_recommendations(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    calls = {}
+
+    def fake_run_graph_guided_draft(requirement, settings, run_id):
+        state = create_initial_state(requirement, "guided_confirmation", run_id=run_id)
+        _fill_minimum_core_fields(state)
+        state.fields["filler_material"].value = "ER50-6"
+        state.fields["filler_material"].status = "candidate"
+        state.fields["filler_material"].candidates = [
+            {
+                "value": "ER50-6",
+                "suitability": "Matches common GMAW carbon steel practice.",
+                "recommended": True,
+                "evidence_ids": ["ev1"],
+            }
+        ]
+        state.status = "need_user_input"
+        attach_interaction_request(
+            state,
+            build_guided_confirmation_request(state, build_confirmation_view(state)),
+        )
+        return AutoDraftResult(state=state, output_dir=str(tmp_path / run_id))
+
+    def fake_resume_interaction(state, payload, settings):
+        calls["payload"] = payload
+        resumed = state.model_copy(deep=True)
+        resumed.status = "done"
+        resumed.pending_interaction = None
+        return InteractionResumeResult(state=resumed, output_dir=str(tmp_path / state.run_id))
+
+    monkeypatch.setattr("pwps_agent.cli.run_graph_guided_draft", fake_run_graph_guided_draft, raising=False)
+    monkeypatch.setattr("pwps_agent.cli.resume_interaction", fake_resume_interaction)
+    monkeypatch.setattr("sys.stdin", InteractiveInput("1\n"))
+
+    exit_code = main(
+        [
+            "guided-draft",
+            "Q355B 12mm GMAW pWPS",
+            "--output-dir",
+            str(tmp_path),
+            "--run-id",
+            "inline_guided",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "ER50-6 [推荐]" in captured.out
+    assert calls["payload"]["fields"] == {"filler_material": "ER50-6"}
+    assert calls["payload"]["evidence_ids_shown"] == ["ev1"]
 
 
 def test_cli_guided_draft_uses_guided_workflow(monkeypatch, tmp_path: Path, capsys) -> None:

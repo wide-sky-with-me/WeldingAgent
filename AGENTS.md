@@ -100,6 +100,7 @@ As of 2026-05-25:
 - guided_confirmation policy prevents empty user pauses: if no candidate/missing/confirmation content exists, premature `ASK_USER` or `guided_options` actions are routed back to evidence planning/reasoning ✅
 - Runtime interaction state is stored in `PWPSState.pending_interaction` / `interaction_requests`; terminal, Web, and API inputs should act as adapters for the same `ASK_USER` pause shape ✅
 - Generic `interaction-resume` reuses normal draft runtime dependency construction when dependencies are not injected, so CLI resume can continue through real LLM/search-backed graph execution ✅
+- Interactive terminal runs of `draft`, `auto-draft`, and `guided-draft` now consume the same `pending_interaction` pause shape inline: the CLI prints questions/recommendations, blocks for user input when `stdin.isatty()`, resumes through `resume_interaction()`, and continues the graph in the same process ✅
 - supplement_update (patch state, re-evaluate) ✅
 
 **Persistence & Artifacts**
@@ -143,6 +144,9 @@ uv run pytest tests/test_interaction_gates.py tests/test_graph_auto_draft.py tes
 uv run pytest -q
 170 passed
 
+uv run pytest -q
+172 passed
+
 uv run pytest tests/test_graph_supervisor_planner.py tests/test_graph_guided_confirmation.py tests/test_guided_confirmation_resume.py -q
 30 passed
 
@@ -156,7 +160,7 @@ uv run pytest tests/test_interaction_gates.py tests/test_interaction_resume.py t
 26 passed
 
 uv run pytest tests/test_cli.py -q
-16 passed
+18 passed
 
 uv run pytest tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_guided_confirmation.py -q
 15 passed

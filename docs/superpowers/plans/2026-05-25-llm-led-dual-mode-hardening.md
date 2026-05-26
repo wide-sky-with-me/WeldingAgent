@@ -547,3 +547,37 @@ uv run pytest tests/test_graph_supervisor_planner.py tests/test_graph_guided_con
 uv run pytest -q
 170 passed
 ```
+
+## Task 11: Inline Interactive CLI Adapter
+
+**Goal:** Make the CLI behave like a real terminal interaction adapter for the
+same graph pause protocol. When `auto-draft`, `guided-draft`, or `draft` reaches
+`status=need_user_input` in an interactive terminal, the command should print the
+runtime question, show recommendations/options when available, block for user
+input, apply the response through `resume_interaction()`, and continue the graph
+inside the same process. Non-TTY/scripted runs keep the previous behavior and
+can still use `interaction-resume`.
+
+**Files:**
+- Modify: `src/pwps_agent/cli.py`
+- Modify: `tests/test_cli.py`
+
+- [x] Add an inline interactive continuation loop after `draft`,
+  `auto-draft`, and `guided-draft` graph invocation.
+- [x] Keep graph/runtime semantics unchanged: the CLI only adapts
+  `pending_interaction` into terminal prompts and resumes through
+  `resume_interaction()`.
+- [x] For initial auto-draft context, prompt each missing minimum field in the
+  same command instead of requiring a second resume command.
+- [x] For guided confirmation, print candidate options, mark recommended values,
+  show suitability/risk notes, accept an option number or direct value, and then
+  continue.
+- [x] Preserve non-interactive script compatibility by only blocking when
+  `stdin.isatty()` is true.
+
+Focused verification:
+
+```bash
+uv run pytest tests/test_cli.py -q
+18 passed
+```
