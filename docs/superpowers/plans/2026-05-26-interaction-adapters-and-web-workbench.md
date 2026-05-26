@@ -287,7 +287,7 @@ Review notes resolved:
 - Test: `tests/test_cli_interaction_adapter.py`
 - Modify: `tests/test_cli.py`
 
-- [ ] **Step 1: Write failing terminal adapter tests**
+- [x] **Step 1: Write failing terminal adapter tests**
 
 Create `tests/test_cli_interaction_adapter.py`:
 
@@ -345,7 +345,7 @@ def test_collect_terminal_response_returns_raw_text() -> None:
     assert "请选择焊材。" in stdout.getvalue()
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -355,7 +355,7 @@ uv run pytest tests/test_cli_interaction_adapter.py -q
 
 Expected: fail because `terminal.py` does not exist.
 
-- [ ] **Step 3: Implement terminal adapter**
+- [x] **Step 3: Implement terminal adapter**
 
 Create `src/pwps_agent/interaction/terminal.py`:
 
@@ -408,7 +408,7 @@ def collect_terminal_response(
     return value
 ```
 
-- [ ] **Step 4: Implement shared interactive runtime loop**
+- [x] **Step 4: Implement shared interactive runtime loop**
 
 Create `src/pwps_agent/interaction/runtime.py`:
 
@@ -464,7 +464,7 @@ def _collect(interaction: dict[str, Any], stdin: TextIO, stdout: TextIO) -> str:
     return collect_terminal_response(interaction, stdin=stdin, stdout=stdout)
 ```
 
-- [ ] **Step 5: Slim `cli.py`**
+- [x] **Step 5: Slim `cli.py`**
 
 Modify `src/pwps_agent/cli.py`:
 
@@ -483,7 +483,7 @@ Delete `_continue_interactive_run`, `_should_prompt_inline`,
 `_fields_from_option_input`, `_parse_inline_field_values`, and
 `_read_required_line` from `src/pwps_agent/cli.py`.
 
-- [ ] **Step 6: Run CLI tests**
+- [x] **Step 6: Run CLI tests**
 
 Run:
 
@@ -493,12 +493,30 @@ uv run pytest tests/test_cli_interaction_adapter.py tests/test_cli.py -q
 
 Expected: pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/pwps_agent/interaction src/pwps_agent/cli.py tests/test_cli.py tests/test_cli_interaction_adapter.py
 git commit -m "refactor: move terminal interaction into adapter"
 ```
+
+Task 2 completed with follow-up quality fixes:
+
+```bash
+uv run pytest tests/test_cli_interaction_adapter.py tests/test_cli.py tests/test_interaction_normalizer.py -q
+33 passed
+
+uv run pytest tests/test_interaction_resume.py tests/test_guided_confirmation_resume.py -q
+8 passed
+
+uv run pytest tests/test_cli_interaction_adapter.py tests/test_cli.py tests/test_interaction_normalizer.py tests/test_interaction_resume.py tests/test_guided_confirmation_resume.py -q
+41 passed
+```
+
+Review notes resolved:
+- Multi-question option prompts are collected per question before normalization.
+- Required terminal free-text answers map to requested fields instead of empty payloads.
+- `src/pwps_agent/cli.py` delegates draft interaction handling to `pwps_agent.interaction.runtime`.
 
 ---
 
