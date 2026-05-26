@@ -10,3 +10,5 @@ data/index/
 
 outputs/
 logs/
+web/node_modules/
+web/dist/
