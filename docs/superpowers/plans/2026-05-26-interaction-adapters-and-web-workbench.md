@@ -762,7 +762,7 @@ uv run pytest tests/test_cli.py -q
 - Create: `web/src/components/ConfirmationHistory.tsx`
 - Create: `web/src/styles/app.css`
 
-- [ ] **Step 1: Create frontend package**
+- [x] **Step 1: Create frontend package**
 
 Create `web/package.json`:
 
@@ -843,7 +843,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 2: Create frontend types**
+- [x] **Step 2: Create frontend types**
 
 Create `web/src/app/types.ts`:
 
@@ -904,7 +904,7 @@ export type RunSnapshot = {
 };
 ```
 
-- [ ] **Step 3: Create API client**
+- [x] **Step 3: Create API client**
 
 Create `web/src/app/api.ts`:
 
@@ -928,7 +928,7 @@ export async function respondToRun(runId: string, message: string): Promise<RunS
 }
 ```
 
-- [ ] **Step 4: Create app shell and components**
+- [x] **Step 4: Create app shell and components**
 
 Create `web/src/app/App.tsx`:
 
@@ -1029,7 +1029,7 @@ export function InteractionPanel({
 }
 ```
 
-- [ ] **Step 5: Add operational CSS**
+- [x] **Step 5: Add operational CSS**
 
 Create `web/src/styles/app.css` with stable layout:
 
@@ -1084,7 +1084,7 @@ button { border: 0; border-radius: 6px; padding: 8px 10px; background: #176b5d; 
 }
 ```
 
-- [ ] **Step 6: Install and build frontend**
+- [x] **Step 6: Install and build frontend**
 
 Run:
 
@@ -1096,11 +1096,28 @@ pnpm build
 
 Expected: TypeScript and Vite build pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add web
 git commit -m "feat: add react pwps workbench"
+```
+
+Task 4 completed:
+
+```bash
+pnpm install
+Done in 596ms using pnpm v11.1.1
+
+pnpm add -D @types/react @types/react-dom
+Done in 2.8s using pnpm v11.1.1
+
+pnpm --dir web test
+tsc --noEmit passed
+
+pnpm --dir web build
+vite v7.3.3 building client environment for production...
+✓ built in 1.72s
 ```
 
 ---
