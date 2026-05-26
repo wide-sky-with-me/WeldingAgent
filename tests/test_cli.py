@@ -456,10 +456,7 @@ def test_cli_auto_draft_prompts_inline_for_initial_context(
     monkeypatch.setattr("pwps_agent.interaction.runtime.resume_interaction", fake_resume_interaction)
     monkeypatch.setattr(
         "sys.stdin",
-        InteractiveInput(
-            "base_material=Q355B, thickness=12mm, workpiece_type=plate, "
-            "welding_process=GMAW, joint_type=butt joint, welding_position=flat\n"
-        ),
+        InteractiveInput("Q355B\n12mm\nplate\nGMAW\nbutt joint\nflat\n"),
     )
 
     exit_code = main(

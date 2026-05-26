@@ -50,14 +50,12 @@ def collect_terminal_payload(
     collector = collector or collect_terminal_response
     questions = _questions(interaction)
     if len(questions) <= 1:
-        raw_text = collector(interaction, stdin, stdout)
-        return normalize_interaction_response(interaction, raw_text)
+        return _collect_question_payload(interaction, stdin, stdout, collector)
 
     payloads: list[dict] = []
     for question in questions:
         question_interaction = _interaction_for_question(interaction, question)
-        raw_text = collector(question_interaction, stdin, stdout)
-        payloads.append(normalize_interaction_response(question_interaction, raw_text))
+        payloads.append(_collect_question_payload(question_interaction, stdin, stdout, collector))
     return _merge_question_payloads(interaction, payloads)
 
 
@@ -76,6 +74,83 @@ def _interaction_for_question(interaction: dict, question: dict[str, Any]) -> di
     question_interaction = dict(interaction)
     question_interaction["questions"] = [question]
     return question_interaction
+
+
+def _collect_question_payload(
+    interaction: dict,
+    stdin: TextIO,
+    stdout: TextIO,
+    collector: TerminalCollector,
+) -> dict:
+    questions = _questions(interaction)
+    question = questions[0] if questions else {}
+    if _is_free_text_question(question):
+        return _collect_free_text_payload(interaction, question, stdin, stdout, collector)
+
+    raw_text = collector(interaction, stdin, stdout)
+    return normalize_interaction_response(interaction, raw_text)
+
+
+def _collect_free_text_payload(
+    interaction: dict,
+    question: dict[str, Any],
+    stdin: TextIO,
+    stdout: TextIO,
+    collector: TerminalCollector,
+) -> dict:
+    field_ids = [str(field_id) for field_id in question.get("field_ids") or []]
+    if len(field_ids) == 1:
+        raw_text = collector(interaction, stdin, stdout)
+        return _terminal_field_payload(
+            interaction=interaction,
+            fields={field_ids[0]: raw_text},
+            message=raw_text,
+        )
+
+    fields: dict[str, str] = {}
+    messages: list[str] = []
+    for field_id in field_ids:
+        field_interaction = _interaction_for_question(
+            interaction,
+            {
+                **question,
+                "field_ids": [field_id],
+                "prompt": f"{question.get('prompt') or 'Please provide input.'}\n{field_id}",
+            },
+        )
+        raw_text = collector(field_interaction, stdin, stdout)
+        fields[field_id] = raw_text
+        messages.append(f"{field_id}={raw_text}")
+
+    if question.get("required", True) and field_ids and set(fields) != set(field_ids):
+        raise ValueError("Required terminal free-text fields were not collected.")
+    return _terminal_field_payload(
+        interaction=interaction,
+        fields=fields,
+        message="\n".join(messages),
+    )
+
+
+def _terminal_field_payload(
+    *,
+    interaction: dict,
+    fields: dict[str, Any],
+    message: str,
+) -> dict:
+    return {
+        "request_id": str(interaction.get("request_id") or ""),
+        "fields": fields,
+        "selected_options": [],
+        "message": message,
+        "reason": "terminal_free_text_fields",
+        "evidence_ids_shown": [],
+        "action": "modified",
+        "unresolved_text": "",
+    }
+
+
+def _is_free_text_question(question: dict[str, Any]) -> bool:
+    return question.get("input_kind") == "free_text" and not question.get("options")
 
 
 def _merge_question_payloads(interaction: dict, payloads: list[dict]) -> dict:
