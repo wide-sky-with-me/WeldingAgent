@@ -219,6 +219,12 @@ supplement_update
 
 这三者共享同一个 `PWPSState`、字段 Schema、证据模型和渲染机制。
 
+CLI 和 Web 是交互 adapter，不是额外运行模式。二者都消费
+`PWPSState.pending_interaction`，将用户输入归一化为结构化响应，然后通过
+`resume_interaction()` 继续同一条 LangGraph 运行链路。React Web workbench
+替代旧的 Python 内嵌 guided-confirmation HTML；`guided-confirm-web` 仅作为兼容
+入口启动新的 workbench。
+
 ### 5.5 PWPSState
 
 PWPSState 是系统数据中心。

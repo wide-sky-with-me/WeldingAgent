@@ -101,6 +101,8 @@ As of 2026-05-25:
 - Runtime interaction state is stored in `PWPSState.pending_interaction` / `interaction_requests`; terminal, Web, and API inputs should act as adapters for the same `ASK_USER` pause shape ✅
 - Generic `interaction-resume` reuses normal draft runtime dependency construction when dependencies are not injected, so CLI resume can continue through real LLM/search-backed graph execution ✅
 - Interactive terminal runs of `draft`, `auto-draft`, and `guided-draft` now consume the same `pending_interaction` pause shape inline: the CLI prints questions/recommendations, blocks for user input when `stdin.isatty()`, resumes through `resume_interaction()`, and continues the graph in the same process ✅
+- CLI terminal and React Web workbench are treated as adapters over the same runtime interaction protocol ✅
+- Legacy embedded guided-confirmation HTML has been replaced by a mode-neutral runtime Web API and React workbench ✅
 - supplement_update (patch state, re-evaluate) ✅
 
 **Persistence & Artifacts**

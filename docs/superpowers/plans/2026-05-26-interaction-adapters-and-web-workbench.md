@@ -1293,7 +1293,7 @@ passed
 - Modify: `AGENTS.md`
 - Modify: `docs/superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md`
 
-- [ ] **Step 1: Replace embedded HTML tests**
+- [x] **Step 1: Replace embedded HTML tests**
 
 Modify `tests/test_guided_confirmation_web.py`:
 
@@ -1312,7 +1312,7 @@ def test_legacy_guided_web_payload_keeps_confirmation_view() -> None:
 Remove tests that assert `render_guided_confirmation_html()` contains old page
 text.
 
-- [ ] **Step 2: Remove embedded HTML renderer**
+- [x] **Step 2: Remove embedded HTML renderer**
 
 Modify `src/pwps_agent/web/guided_confirmation.py`:
 
@@ -1345,7 +1345,7 @@ def serve_guided_confirmation(
 
 Keep `load_state()` and `save_state()` if CLI resume commands still import them.
 
-- [ ] **Step 3: Update docs**
+- [x] **Step 3: Update docs**
 
 In `docs/architecture.md`, add a short section under Interaction Subflows:
 
@@ -1362,7 +1362,7 @@ In `AGENTS.md`, update Current Implementation Progress with:
 - Legacy embedded guided-confirmation HTML has been replaced by a mode-neutral runtime Web API and React workbench ✅
 ```
 
-- [ ] **Step 4: Run Web and docs-related tests**
+- [x] **Step 4: Run Web and docs-related tests**
 
 Run:
 
@@ -1377,6 +1377,19 @@ Expected: pass.
 ```bash
 git add src/pwps_agent/web/guided_confirmation.py tests/test_guided_confirmation_web.py docs/architecture.md AGENTS.md docs/superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md
 git commit -m "refactor: retire embedded guided web ui"
+```
+
+Task 6 verification:
+
+```bash
+uv run pytest tests/test_guided_confirmation_web.py tests/test_web_runtime_api.py tests/test_cli.py -q
+27 passed
+
+uv run pytest tests/test_cli_interaction_adapter.py tests/test_interaction_normalizer.py tests/test_interaction_resume.py -q
+17 passed
+
+python -m py_compile src/pwps_agent/web/guided_confirmation.py src/pwps_agent/web/runtime_api.py
+passed
 ```
 
 ---

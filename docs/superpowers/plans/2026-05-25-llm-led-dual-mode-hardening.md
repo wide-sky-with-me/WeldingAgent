@@ -581,3 +581,9 @@ Focused verification:
 uv run pytest tests/test_cli.py -q
 18 passed
 ```
+
+Follow-up structure work moved into
+`docs/superpowers/plans/2026-05-26-interaction-adapters-and-web-workbench.md`:
+CLI and React Web are now treated as adapters above `pending_interaction` /
+`resume_interaction()`, and the old embedded guided-confirmation HTML is being
+retired in favor of a mode-neutral runtime Web API plus React workbench.

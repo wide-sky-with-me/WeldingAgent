@@ -5,7 +5,6 @@ from pwps_agent.web.guided_confirmation import (
     apply_confirmation_payload,
     apply_resume_payload,
     apply_resume_run_payload,
-    render_guided_confirmation_html,
     web_state_payload,
 )
 
@@ -41,6 +40,7 @@ def test_web_payload_exposes_confirmation_view() -> None:
     payload = web_state_payload(state)
 
     assert payload["run_id"] == "run_local"
+    assert payload["mode"] == "guided_confirmation"
     assert payload["confirmation_view"]["groups"]
     assert "confirmations" in payload
 
@@ -62,18 +62,6 @@ def test_web_confirmation_payload_can_batch_confirm_fields() -> None:
     assert updated.fields["filler_material"].status == "user_confirmed"
     assert updated.fields["shielding_gas"].value == "80% Ar / 20% CO2"
     assert updated.confirmations[0].evidence_ids_shown == ["ev_web_1"]
-
-
-def test_web_html_contains_guided_confirmation_shell() -> None:
-    html = render_guided_confirmation_html()
-
-    assert "clarification_questions" in html
-    assert "候选" in html
-    assert "证据" in html
-    assert "风险" in html
-    assert "确认选中字段" in html
-    assert "编辑" in html
-    assert "生成草案" in html
 
 
 def test_web_resume_payload_persists_artifacts(tmp_path) -> None:
