@@ -1518,6 +1518,29 @@ curl -s http://127.0.0.1:8765/api/runs/cli_inline_smoke/artifacts/pwps_draft.md
 The workbench served the React built asset entry, returned the run snapshot for
 `cli_inline_smoke`, and returned the generated Markdown draft artifact.
 
+Post-completion correction:
+
+```bash
+uv run pytest -q
+192 passed in 2.89s
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
+uv run pwps-agent auto-draft "帮我生成一个 pWPS 草稿" --output-dir /tmp/pwps-llm-interaction-smoke --run-id natural_cli_smoke
+/tmp/pwps-llm-interaction-smoke/natural_cli_smoke
+```
+
+The initial CLI interaction now asks for one natural-language welding-scene
+reply instead of collecting minimum fields one by one. The reply
+`用 Q355B 的 12 毫米板做 GMAW 气保焊，对接接头，平焊位置，先出一版草稿。`
+was parsed by LLM structured output into `base_material`, `thickness`,
+`workpiece_type`, `welding_process`, `joint_type`, and `welding_position`; the
+graph resumed and finished with `status=done`.
+
 ---
 
 ## Self-Review

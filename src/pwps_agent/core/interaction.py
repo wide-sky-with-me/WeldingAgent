@@ -76,13 +76,17 @@ def build_initial_info_request(state: PWPSState) -> InteractionRequest:
         purpose="initial_minimum_context",
         title="补充最小焊接场景信息",
         summary=(
-            "auto_draft 可以低交互生成草稿，但当前输入还不足以启动检索和推理。"
+            "我还缺少能启动 pWPS 草稿推理的焊接场景。你不用按表格填写，直接用一两句话描述即可。"
         ),
         questions=[
             InteractionQuestion(
                 question_id="minimum_core_fields",
                 field_ids=missing,
-                prompt="请补充这些最小起点字段：" + "、".join(labels),
+                prompt=(
+                    "请补充母材、厚度或壁厚、板/管类型、焊接方法、接头类型、焊接位置。"
+                    "例如：Q355B 12mm 板，GMAW 对接，平焊。当前还缺："
+                    + "、".join(labels)
+                ),
                 input_kind="free_text",
                 required=True,
             )

@@ -6,7 +6,9 @@ from typing import Any, Callable, TextIO
 from pwps_agent.config import Settings
 from pwps_agent.core.state import PWPSState
 from pwps_agent.interaction.normalizer import normalize_interaction_response
+from pwps_agent.interaction.response_understanding import understand_interaction_response
 from pwps_agent.interaction.terminal import collect_terminal_response
+from pwps_agent.llm.langchain_client import LangChainStructuredClient
 from pwps_agent.workflows.auto_draft import AutoDraftResult
 from pwps_agent.workflows.interaction_resume import resume_interaction
 
@@ -19,10 +21,12 @@ def continue_interactive_run(
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
     collector: TerminalCollector | None = None,
+    response_client: object | None = None,
 ) -> AutoDraftResult:
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     collector = collector or collect_terminal_response
+    response_client = response_client or LangChainStructuredClient(settings.llm)
 
     if not should_prompt_inline(result.state, stdin=stdin):
         return result
@@ -35,7 +39,14 @@ def continue_interactive_run(
             stdin,
             stdout,
             collector=collector,
+            response_client=response_client,
         )
+        if _should_continue_asking(current.state, payload):
+            current = AutoDraftResult(
+                state=_state_with_follow_up(current.state, payload),
+                output_dir=current.output_dir,
+            )
+            continue
         resumed = resume_interaction(current.state, payload, settings=settings)
         current = AutoDraftResult(state=resumed.state, output_dir=resumed.output_dir)
     return current
@@ -46,9 +57,19 @@ def collect_terminal_payload(
     stdin: TextIO,
     stdout: TextIO,
     collector: TerminalCollector | None = None,
+    response_client: object | None = None,
 ) -> dict:
     collector = collector or collect_terminal_response
     questions = _questions(interaction)
+    if _is_llm_understood_free_text_interaction(interaction):
+        return _collect_llm_understood_free_text_payload(
+            interaction,
+            stdin,
+            stdout,
+            collector,
+            response_client,
+        )
+
     if len(questions) <= 1:
         return _collect_question_payload(interaction, stdin, stdout, collector)
 
@@ -131,26 +152,96 @@ def _collect_free_text_payload(
     )
 
 
+def _collect_llm_understood_free_text_payload(
+    interaction: dict,
+    stdin: TextIO,
+    stdout: TextIO,
+    collector: TerminalCollector,
+    response_client: object | None,
+) -> dict:
+    if response_client is None:
+        raise ValueError("LLM response client is required for free-form interaction input.")
+    raw_text = collector(interaction, stdin, stdout)
+    understood = understand_interaction_response(interaction, raw_text, response_client)
+    return _terminal_field_payload(
+        interaction=interaction,
+        fields=understood["fields"],
+        message=raw_text,
+        reason="llm_interaction_response_understanding",
+        missing_field_ids=understood["missing_field_ids"],
+        follow_up_message=understood["follow_up_message"],
+    )
+
+
 def _terminal_field_payload(
     *,
     interaction: dict,
     fields: dict[str, Any],
     message: str,
+    reason: str = "terminal_free_text_fields",
+    missing_field_ids: list[str] | None = None,
+    follow_up_message: str = "",
 ) -> dict:
     return {
         "request_id": str(interaction.get("request_id") or ""),
         "fields": fields,
         "selected_options": [],
         "message": message,
-        "reason": "terminal_free_text_fields",
+        "reason": reason,
         "evidence_ids_shown": [],
         "action": "modified",
         "unresolved_text": "",
+        "missing_field_ids": missing_field_ids or [],
+        "follow_up_message": follow_up_message,
     }
 
 
 def _is_free_text_question(question: dict[str, Any]) -> bool:
     return question.get("input_kind") == "free_text" and not question.get("options")
+
+
+def _is_llm_understood_free_text_interaction(interaction: dict) -> bool:
+    questions = _questions(interaction)
+    return (
+        interaction.get("purpose") == "initial_minimum_context"
+        and len(questions) == 1
+        and _is_free_text_question(questions[0])
+    )
+
+
+def _should_continue_asking(state: PWPSState, payload: dict[str, Any]) -> bool:
+    pending = state.pending_interaction or {}
+    return (
+        pending.get("purpose") == "initial_minimum_context"
+        and not payload.get("fields")
+    )
+
+
+def _state_with_follow_up(state: PWPSState, payload: dict[str, Any]) -> PWPSState:
+    updated = state.model_copy(deep=True)
+    pending = dict(updated.pending_interaction or {})
+    missing = [str(field_id) for field_id in payload.get("missing_field_ids") or []]
+    pending["assistant_message"] = str(payload.get("follow_up_message") or _default_follow_up(missing))
+    updated.pending_interaction = pending
+    updated.trace.append(
+        {
+            "step": len(updated.trace) + 1,
+            "node": "interaction_response_understanding",
+            "event_type": "user_input_required",
+            "summary": "Free-form interaction response did not provide enough requested fields.",
+            "payload": {
+                "request_id": payload.get("request_id"),
+                "missing_field_ids": missing,
+            },
+        }
+    )
+    return updated
+
+
+def _default_follow_up(missing_field_ids: list[str]) -> str:
+    if not missing_field_ids:
+        return "我还没能从你的回复里提取到可用的焊接起点信息。可以直接用一句话补充母材、厚度、工件类型、焊接方法、接头和位置。"
+    return "我还需要这些信息才能继续：" + "、".join(missing_field_ids) + "。你可以用一句话一起补充。"
 
 
 def _merge_question_payloads(interaction: dict, payloads: list[dict]) -> dict:

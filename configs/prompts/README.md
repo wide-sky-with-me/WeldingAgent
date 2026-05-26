@@ -8,6 +8,8 @@ should be kept here or in `src/pwps_agent/domain_skills/*.md`.
 
 - `requirement_understanding.md`: extract reliable core pWPS fields from raw
   user requirements.
+- `interaction_response_understanding.md`: extract requested pWPS fields from
+  free-form runtime interaction replies and produce natural follow-up wording.
 - `knowledge_planning.md`: plan local/web/model evidence queries from current
   state.
 - `field_reasoning.md`: convert evidence and field context into traceable

@@ -101,6 +101,7 @@ As of 2026-05-25:
 - Runtime interaction state is stored in `PWPSState.pending_interaction` / `interaction_requests`; terminal, Web, and API inputs should act as adapters for the same `ASK_USER` pause shape ✅
 - Generic `interaction-resume` reuses normal draft runtime dependency construction when dependencies are not injected, so CLI resume can continue through real LLM/search-backed graph execution ✅
 - Interactive terminal runs of `draft`, `auto-draft`, and `guided-draft` now consume the same `pending_interaction` pause shape inline: the CLI prints questions/recommendations, blocks for user input when `stdin.isatty()`, resumes through `resume_interaction()`, and continues the graph in the same process ✅
+- Initial CLI context collection now asks for one natural-language welding-scene reply and uses LLM structured extraction; it no longer forces field-by-field terminal input for minimum startup fields ✅
 - CLI terminal and React Web workbench are treated as adapters over the same runtime interaction protocol ✅
 - Legacy embedded guided-confirmation HTML has been replaced by a mode-neutral runtime Web API and React workbench ✅
 - supplement_update (patch state, re-evaluate) ✅
@@ -131,6 +132,19 @@ As of 2026-05-25:
 **Recent Verification**
 
 ```bash
+uv run pytest -q
+192 passed in 2.89s
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
+uv run pwps-agent auto-draft "帮我生成一个 pWPS 草稿" --output-dir /tmp/pwps-llm-interaction-smoke --run-id natural_cli_smoke
+/tmp/pwps-llm-interaction-smoke/natural_cli_smoke ✅
+CLI asked once for natural welding context, LLM extracted Q355B / 12mm / 板 / GMAW / 对接 / 平焊 from one Chinese sentence, and the graph resumed to status=done.
+
 uv run pytest -q
 191 passed in 3.22s
 

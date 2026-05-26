@@ -101,6 +101,7 @@ def _single_field_free_text_interaction() -> dict:
 def _multi_field_free_text_interaction() -> dict:
     return {
         "request_id": "run1:initial_minimum_context:1",
+        "purpose": "initial_minimum_context",
         "title": "Provide initial context",
         "questions": [
             {
@@ -113,6 +114,22 @@ def _multi_field_free_text_interaction() -> dict:
             }
         ],
     }
+
+
+class FakeResponseClient:
+    def __init__(self, fields=None, missing_field_ids=None, follow_up_message="") -> None:
+        self.fields = fields or {}
+        self.missing_field_ids = missing_field_ids or []
+        self.follow_up_message = follow_up_message
+        self.user_prompts: list[str] = []
+
+    def complete_structured(self, system_prompt, user_prompt, schema):
+        self.user_prompts.append(user_prompt)
+        return schema(
+            fields=self.fields,
+            missing_field_ids=self.missing_field_ids,
+            follow_up_message=self.follow_up_message,
+        )
 
 
 def test_render_terminal_interaction_includes_prompt_and_option_details() -> None:
@@ -134,7 +151,7 @@ def test_collect_terminal_response_prints_interaction_and_returns_raw_line() -> 
 
     assert response == "1"
     assert "Confirm welding choices" in stdout.getvalue()
-    assert "请输入选项编号或 field=value" in stdout.getvalue()
+    assert "请输入选项编号或直接说明你的选择" in stdout.getvalue()
 
 
 def test_collect_terminal_payload_normalizes_multi_question_answers() -> None:
@@ -172,19 +189,29 @@ def test_collect_terminal_payload_maps_single_field_free_text_to_field() -> None
     assert payload["unresolved_text"] == ""
 
 
-def test_collect_terminal_payload_collects_each_multi_field_free_text_value() -> None:
+def test_collect_terminal_payload_uses_llm_for_initial_free_text_response() -> None:
+    client = FakeResponseClient(
+        fields={
+            "base_material": "Q355B",
+            "thickness": "12mm",
+        },
+        missing_field_ids=[],
+    )
     payload = collect_terminal_payload(
         _multi_field_free_text_interaction(),
-        StringIO("Q355B\n12mm\n"),
+        StringIO("Q355B 12mm 板，GMAW 对接平焊\n"),
         StringIO(),
+        response_client=client,
     )
 
     assert payload["fields"] == {
         "base_material": "Q355B",
         "thickness": "12mm",
     }
-    assert payload["message"] == "base_material=Q355B\nthickness=12mm"
+    assert payload["message"] == "Q355B 12mm 板，GMAW 对接平焊"
+    assert payload["reason"] == "llm_interaction_response_understanding"
     assert payload["unresolved_text"] == ""
+    assert "Q355B 12mm 板" in client.user_prompts[0]
 
 
 def test_continue_interactive_run_resumes_required_free_text_with_fields(monkeypatch) -> None:
@@ -209,11 +236,68 @@ def test_continue_interactive_run_resumes_required_free_text_with_fields(monkeyp
     continue_interactive_run(
         AutoDraftResult(state=state, output_dir="/tmp/free_text_resume"),
         Settings(),
-        stdin=InteractiveInput("Q355B\n12mm\n"),
+        stdin=InteractiveInput("Q355B 12mm 板，GMAW 对接平焊\n"),
         stdout=StringIO(),
+        response_client=FakeResponseClient(
+            fields={
+                "base_material": "Q355B",
+                "thickness": "12mm",
+            },
+        ),
     )
 
     assert calls["payload"]["fields"] == {
         "base_material": "Q355B",
         "thickness": "12mm",
     }
+
+
+def test_continue_interactive_run_keeps_asking_when_llm_extracts_no_fields(monkeypatch) -> None:
+    calls: list[dict] = []
+    state = create_initial_state("make a pWPS", "auto_draft", run_id="free_text_reask")
+    state.status = "need_user_input"
+    state.pending_interaction = _multi_field_free_text_interaction()
+
+    class InteractiveInput(StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    def fake_resume_interaction(state, payload, settings):
+        calls.append(payload)
+        resumed = state.model_copy(deep=True)
+        resumed.status = "done"
+        resumed.pending_interaction = None
+        return InteractionResumeResult(state=resumed, output_dir="/tmp/free_text_reask")
+
+    class SequencedClient:
+        def __init__(self) -> None:
+            self.count = 0
+
+        def complete_structured(self, system_prompt, user_prompt, schema):
+            self.count += 1
+            if self.count == 1:
+                return schema(
+                    fields={},
+                    missing_field_ids=["base_material", "thickness"],
+                    follow_up_message="我还需要母材和厚度，可以用一句话补充。",
+                )
+            return schema(
+                fields={"base_material": "Q355B", "thickness": "12mm"},
+                missing_field_ids=[],
+                follow_up_message="",
+            )
+
+    monkeypatch.setattr("pwps_agent.interaction.runtime.resume_interaction", fake_resume_interaction)
+
+    stdout = StringIO()
+    continue_interactive_run(
+        AutoDraftResult(state=state, output_dir="/tmp/free_text_reask"),
+        Settings(),
+        stdin=InteractiveInput("不知道\nQ355B 12mm\n"),
+        stdout=stdout,
+        response_client=SequencedClient(),
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["fields"] == {"base_material": "Q355B", "thickness": "12mm"}
+    assert "我还需要母材和厚度" in stdout.getvalue()

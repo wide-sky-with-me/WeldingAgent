@@ -38,7 +38,7 @@ def collect_terminal_response(
     print("", file=stdout)
     print(render_terminal_interaction(interaction), file=stdout)
     while True:
-        print("请输入选项编号或 field=value: ", end="", flush=True, file=stdout)
+        print(_input_prompt(interaction), end="", flush=True, file=stdout)
         value = stdin.readline()
         if value == "":
             raise EOFError("Input ended while waiting for runtime interaction response.")
@@ -46,6 +46,18 @@ def collect_terminal_response(
         if value:
             return value
         print("不能为空。", file=stdout)
+
+
+def _input_prompt(interaction: dict) -> str:
+    questions = _questions(interaction)
+    if (
+        interaction.get("purpose") == "initial_minimum_context"
+        and len(questions) == 1
+        and questions[0].get("input_kind") == "free_text"
+        and not questions[0].get("options")
+    ):
+        return "请直接描述焊接场景: "
+    return "请输入选项编号或直接说明你的选择: "
 
 
 def _render_option(index: int, option: dict[str, Any]) -> list[str]:
