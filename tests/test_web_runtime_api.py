@@ -7,6 +7,7 @@ from pwps_agent.web.runtime_api import (
     build_run_snapshot,
     load_run_state,
     save_run_state,
+    static_asset_path,
 )
 
 
@@ -60,3 +61,9 @@ def test_apply_run_response_normalizes_raw_text(monkeypatch, tmp_path: Path) -> 
     assert snapshot["status"] == "done"
     assert snapshot["fields"]["base_material"]["value"] == "Q355B"
     assert load_run_state(tmp_path, "api_response").status == "done"
+
+
+def test_static_asset_path_serves_react_index() -> None:
+    path = static_asset_path("/")
+
+    assert path.name == "index.html"

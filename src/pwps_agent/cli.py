@@ -15,6 +15,7 @@ from pwps_agent.core.modes import (
 )
 from pwps_agent.interaction.runtime import continue_interactive_run
 from pwps_agent.web.guided_confirmation import load_state, save_state, serve_guided_confirmation
+from pwps_agent.web.runtime_api import serve_workbench
 from pwps_agent.workflows.guided_confirmation import (
     resume_guided_confirmation,
     resume_guided_confirmation_from_checkpoint,
@@ -83,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
     guided_confirm_web.add_argument("state_path", type=Path)
     guided_confirm_web.add_argument("--host", default="127.0.0.1")
     guided_confirm_web.add_argument("--port", type=int, default=8765)
+
+    web_workbench = subparsers.add_parser("web-workbench")
+    web_workbench.add_argument("--output-dir", type=Path, default=None)
+    web_workbench.add_argument("--host", default="127.0.0.1")
+    web_workbench.add_argument("--port", type=int, default=8765)
 
     interaction_resume = subparsers.add_parser("interaction-resume")
     interaction_resume.add_argument("state_path", type=Path)
@@ -305,6 +311,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "guided-confirm-web":
         try:
             serve_guided_confirmation(args.state_path, host=args.host, port=args.port)
+        except KeyboardInterrupt:
+            return 0
+        except Exception as exc:
+            print(f"pwps-agent: {exc}", file=sys.stderr)
+            return 1
+
+    if args.command == "web-workbench":
+        settings = load_settings()
+        if args.output_dir is not None:
+            settings.paths.output_dir = args.output_dir
+        try:
+            serve_workbench(settings.paths.output_dir, host=args.host, port=args.port)
         except KeyboardInterrupt:
             return 0
         except Exception as exc:

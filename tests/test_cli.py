@@ -217,6 +217,27 @@ def test_cli_parser_accepts_generic_interaction_resume(tmp_path: Path) -> None:
     assert args.output_dir == tmp_path
 
 
+def test_cli_parser_accepts_web_workbench(tmp_path: Path) -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "web-workbench",
+            "--output-dir",
+            str(tmp_path),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8766",
+        ]
+    )
+
+    assert args.command == "web-workbench"
+    assert args.output_dir == tmp_path
+    assert args.host == "127.0.0.1"
+    assert args.port == 8766
+
+
 def test_cli_guided_confirmation_resume_writes_artifacts(tmp_path: Path, capsys) -> None:
     state_path = tmp_path / "state.json"
     state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation", run_id="cli_resume")
