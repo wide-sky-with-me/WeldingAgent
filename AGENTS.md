@@ -132,6 +132,29 @@ As of 2026-05-25:
 
 ```bash
 uv run pytest -q
+191 passed in 3.22s
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
+pnpm --dir web test
+passed
+
+pnpm --dir web build
+vite v7.3.3 built web/dist in 1.74s
+
+uv run pwps-agent auto-draft "生成一个 pWPS 草稿" --output-dir /tmp/pwps-interaction-smoke --run-id cli_inline_smoke
+/tmp/pwps-interaction-smoke/cli_inline_smoke ✅
+CLI paused inside the same command for minimum startup fields, accepted terminal input, then resumed through real LLM/search-backed graph execution to status=done.
+
+uv run pwps-agent web-workbench --output-dir /tmp/pwps-interaction-smoke --host 127.0.0.1 --port 8765
+http://127.0.0.1:8765/?run_id=cli_inline_smoke ✅
+Workbench served the React built asset entry, returned the run snapshot API, and returned the generated Markdown draft artifact.
+
+uv run pytest -q
 159 passed
 
 uv run pytest tests/test_interaction_gates.py tests/test_publishability.py tests/test_evidence_policy.py tests/test_guided_options.py tests/test_eval_metrics.py -q

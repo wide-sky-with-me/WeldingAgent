@@ -1400,7 +1400,7 @@ passed
 - Modify: `docs/superpowers/plans/2026-05-26-interaction-adapters-and-web-workbench.md`
 - Modify: `AGENTS.md`
 
-- [ ] **Step 1: Run Python verification**
+- [x] **Step 1: Run Python verification**
 
 Run:
 
@@ -1418,7 +1418,7 @@ compileall exits 0
 git diff --check exits 0
 ```
 
-- [ ] **Step 2: Run frontend verification**
+- [x] **Step 2: Run frontend verification**
 
 Run:
 
@@ -1429,7 +1429,7 @@ pnpm --dir web build
 
 Expected: TypeScript and Vite build pass.
 
-- [ ] **Step 3: Run CLI smoke with inline interaction**
+- [x] **Step 3: Run CLI smoke with inline interaction**
 
 Run in an interactive terminal:
 
@@ -1444,7 +1444,7 @@ CLI asks for missing startup context inside the same command.
 After user input, the graph continues and prints /tmp/pwps-interaction-smoke/cli_inline_smoke.
 ```
 
-- [ ] **Step 4: Run Web workbench smoke**
+- [x] **Step 4: Run Web workbench smoke**
 
 Run:
 
@@ -1464,17 +1464,59 @@ Expected:
 Workbench loads run snapshot, field state, draft panel, timeline, and current interaction if present.
 ```
 
-- [ ] **Step 5: Record verification**
+- [x] **Step 5: Record verification**
 
 Append verification results to this plan and update `AGENTS.md` Recent
 Verification.
 
-- [ ] **Step 6: Commit verification docs**
+- [x] **Step 6: Commit verification docs**
 
 ```bash
 git add docs/superpowers/plans/2026-05-26-interaction-adapters-and-web-workbench.md AGENTS.md
 git commit -m "docs: record interaction workbench verification"
 ```
+
+Task 7 verification:
+
+```bash
+uv run pytest -q
+191 passed in 3.22s
+
+uv run python -m compileall -q src tests
+passed
+
+git diff --check
+passed with no output
+
+pnpm --dir web test
+passed
+
+pnpm --dir web build
+vite v7.3.3 built web/dist in 1.74s
+```
+
+Smoke checks:
+
+```bash
+uv run pwps-agent auto-draft "生成一个 pWPS 草稿" --output-dir /tmp/pwps-interaction-smoke --run-id cli_inline_smoke
+/tmp/pwps-interaction-smoke/cli_inline_smoke
+```
+
+The CLI paused inside the same command for minimum startup fields, accepted
+terminal input for `base_material`, `thickness`, `workpiece_type`,
+`welding_process`, `joint_type`, and `welding_position`, then resumed the graph
+through real LLM calls, web search, field reasoning, draft verification, and
+draft composition.
+
+```bash
+uv run pwps-agent web-workbench --output-dir /tmp/pwps-interaction-smoke --host 127.0.0.1 --port 8765
+curl -s http://127.0.0.1:8765/?run_id=cli_inline_smoke
+curl -s http://127.0.0.1:8765/api/runs/cli_inline_smoke
+curl -s http://127.0.0.1:8765/api/runs/cli_inline_smoke/artifacts/pwps_draft.md
+```
+
+The workbench served the React built asset entry, returned the run snapshot for
+`cli_inline_smoke`, and returned the generated Markdown draft artifact.
 
 ---
 
