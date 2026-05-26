@@ -530,7 +530,7 @@ Review notes resolved:
 - Test: `tests/test_web_runtime_api.py`
 - Modify: `tests/test_guided_confirmation_web.py`
 
-- [ ] **Step 1: Write failing Web API tests**
+- [x] **Step 1: Write failing Web API tests**
 
 Create `tests/test_web_runtime_api.py`:
 
@@ -595,7 +595,7 @@ def test_apply_run_response_normalizes_raw_text(monkeypatch, tmp_path: Path) -> 
     assert snapshot["fields"]["base_material"]["value"] == "Q355B"
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -605,7 +605,7 @@ uv run pytest tests/test_web_runtime_api.py -q
 
 Expected: fail because `runtime_api.py` does not exist.
 
-- [ ] **Step 3: Implement Web runtime API helpers**
+- [x] **Step 3: Implement Web runtime API helpers**
 
 Create `src/pwps_agent/web/runtime_api.py`:
 
@@ -676,7 +676,7 @@ def apply_run_response(
     return build_run_snapshot(result.state, Path(result.output_dir))
 ```
 
-- [ ] **Step 4: Convert legacy guided Web module to compatibility wrapper**
+- [x] **Step 4: Convert legacy guided Web module to compatibility wrapper**
 
 Modify `src/pwps_agent/web/guided_confirmation.py` so public helpers delegate
 where possible:
@@ -695,9 +695,11 @@ def web_state_payload(state: PWPSState) -> dict[str, Any]:
 Keep `apply_confirmation_payload()` and existing tests temporarily if needed,
 but mark `render_guided_confirmation_html()` as legacy in its docstring.
 
-- [ ] **Step 5: Add CLI command for new workbench**
+- [x] **Step 5: Defer CLI command until the server entrypoint exists**
 
-Modify `src/pwps_agent/cli.py` parser:
+The CLI `web-workbench` command depends on `serve_workbench()`, which is created
+in Task 5. Do not add a non-functional command in this task. Task 5 owns the
+parser and command wiring:
 
 ```python
 web_workbench = subparsers.add_parser("web-workbench")
@@ -706,11 +708,10 @@ web_workbench.add_argument("--host", default="127.0.0.1")
 web_workbench.add_argument("--port", type=int, default=8765)
 ```
 
-Wire command to the new server entrypoint added in Task 4. Keep
-`guided-confirm-web` as compatibility for a state path until Task 5 removes the
-embedded UI.
+Keep `guided-confirm-web` as compatibility for a state path until Task 6 removes
+the embedded UI.
 
-- [ ] **Step 6: Run Web API tests**
+- [x] **Step 6: Run Web API tests**
 
 Run:
 
@@ -720,11 +721,24 @@ uv run pytest tests/test_web_runtime_api.py tests/test_guided_confirmation_web.p
 
 Expected: pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/pwps_agent/web src/pwps_agent/cli.py tests/test_web_runtime_api.py tests/test_guided_confirmation_web.py
 git commit -m "feat: add mode-neutral web runtime api"
+```
+
+Task 3 completed:
+
+```bash
+uv run pytest tests/test_web_runtime_api.py -q
+3 passed
+
+uv run pytest tests/test_web_runtime_api.py tests/test_guided_confirmation_web.py -q
+8 passed
+
+uv run pytest tests/test_cli.py -q
+18 passed
 ```
 
 ---
