@@ -7,14 +7,17 @@ Use this Domain Skill when the interaction mode is `auto_draft`.
 Guide the LLM Supervisor to produce a draft pWPS from minimum user input while
 preserving uncertainty. In this mode the Supervisor acts as the autonomous
 drafter: it searches, reasons, chooses candidate values, and completes the run
-without asking the user. Domain Skills do not execute Runtime Tools and do not
-mutate `PWPSState` directly.
+without asking the user after the minimum starting context is available. If the
+minimum starting context is not available, the graph pauses through the runtime
+`ASK_USER` node with a transport-neutral interaction request. Domain Skills do
+not execute Runtime Tools and do not mutate `PWPSState` directly.
 
 ## Success Criteria
 
 - Produce a usable draft even when only the minimum core fields are present.
 - If the minimum core fields are not available before retrieval starts, ask one
-  concise initial clarification question instead of fabricating the scenario.
+  concise runtime initial-clarification request instead of fabricating the
+  scenario.
 - Prefer grounded values over broad guesses.
 - Keep uncertainty visible instead of collapsing it into one false certainty.
 - Leave unsupported project metadata blank or marked as 待确认.
@@ -22,6 +25,8 @@ mutate `PWPSState` directly.
 ## Runtime Tools
 
 - Use requirement understanding before searching.
+- Use the runtime `ASK_USER` interaction request only for the initial minimum
+  information gate; do not bind the interaction to terminal, Web, or API input.
 - Use knowledge planning before web search.
 - Use web and local evidence as references, not final compliance proof.
 - Use field reasoning to convert evidence into candidate or suggested fields.

@@ -41,6 +41,8 @@ The system currently targets draft generation only. Do not claim that outputs ar
 Key points:
 - State First: PWPSState is the single source of truth
 - Preserve Uncertainty: Mark all values with source + confidence metadata
+- Centralize Prompts: production prompts must be managed under `configs/prompts/` or Domain Skill markdown files with clear notes about purpose, mode, and expected structured-output contract; do not scatter prompt text inside runtime code.
+- Runtime code may assemble structured state payloads for user prompts, but model role, task-boundary, mode behavior, safety wording, and output expectations belong in centralized prompt/Domain Skill files.
 - Document Changes: Update this section after completion with verification details
 - Clean Code: Remove dead code, debug output, temp scaffolding before committing
 - Test Always: Full test suite + smoke test before marking done
@@ -81,6 +83,7 @@ As of 2026-05-25:
 **Core Tools**
 - requirement_understanding (LLM-backed) ✅
 - knowledge_planning (model-planned queries) ✅
+- knowledge_planning falls back to a targeted deterministic query when a remote provider structured-output parser error occurs, while preserving the parser error in `ToolResult.errors` ✅
 - web_search (Tavily + Brave, caching, retry logic) ✅
 - local_doc_search (markdown/text retrieval) ✅
 - field_reasoning (evidence → candidates) ✅
@@ -90,9 +93,13 @@ As of 2026-05-25:
 
 **Interaction Modes**
 - auto_draft (autonomous with candidates/suggestions/missing) ✅
-- auto_draft initial information gate asks only before workflow execution when minimum core fields are missing ✅
+- auto_draft initial information gate pauses inside the graph with a transport-neutral interaction request when minimum core fields are missing ✅
+- auto_draft initial gate remains active after requirement understanding when the extracted state still lacks minimum startup fields, and closes once retrieval/reasoning has started ✅
 - guided_confirmation (pause/confirm/evidence/history) ✅
 - guided_confirmation option recommendation keeps key choices in need-confirmation until explicit user confirmation ✅
+- guided_confirmation policy prevents empty user pauses: if no candidate/missing/confirmation content exists, premature `ASK_USER` or `guided_options` actions are routed back to evidence planning/reasoning ✅
+- Runtime interaction state is stored in `PWPSState.pending_interaction` / `interaction_requests`; terminal, Web, and API inputs should act as adapters for the same `ASK_USER` pause shape ✅
+- Generic `interaction-resume` reuses normal draft runtime dependency construction when dependencies are not injected, so CLI resume can continue through real LLM/search-backed graph execution ✅
 - supplement_update (patch state, re-evaluate) ✅
 
 **Persistence & Artifacts**
@@ -109,13 +116,14 @@ As of 2026-05-25:
 - pwps_guided_confirmation.md (confirmation interaction) ✅
 - pwps_evidence_handling.md (uncertainty classification) ✅
 - pwps_risk_review.md (risk flagging) ✅
+- `configs/prompts/README.md` documents the production prompt registry and the boundary between centralized prompt text and runtime state payloads ✅
 
 **Active Hardening Plan**
 - `docs/superpowers/plans/2026-05-25-llm-led-dual-mode-hardening.md` is the active plan.
 - The LLM Supervisor remains the main actor.
 - `auto_draft` should only ask at the beginning when minimum core fields are missing.
 - `guided_confirmation` should recommend options and require human confirmation for key choices.
-- Implemented hardening: initial information gates, publishability/state separation, evidence policy, guided options, Supervisor policy extraction, and agent eval metrics.
+- Implemented hardening: initial information gates, transport-neutral runtime interaction requests, generic interaction resume, centralized Supervisor prompts, publishability/state separation, evidence policy, guided options, Supervisor policy extraction, and agent eval metrics.
 
 **Recent Verification**
 
@@ -128,6 +136,30 @@ uv run pytest tests/test_interaction_gates.py tests/test_publishability.py tests
 
 uv run pytest tests/test_graph_auto_draft.py tests/test_graph_guided_confirmation.py tests/test_graph_supervisor_planner.py tests/test_guided_confirmation.py tests/test_guided_confirmation_resume.py -q
 43 passed
+
+uv run pytest tests/test_interaction_gates.py tests/test_graph_auto_draft.py tests/test_graph_supervisor_planner.py -q
+35 passed
+
+uv run pytest -q
+170 passed
+
+uv run pytest tests/test_graph_supervisor_planner.py tests/test_graph_guided_confirmation.py tests/test_guided_confirmation_resume.py -q
+30 passed
+
+uv run pytest tests/test_knowledge_planning.py tests/test_interaction_resume.py -q
+6 passed
+
+uv run pytest tests/test_interaction_resume.py tests/test_cli.py::test_cli_parser_accepts_generic_interaction_resume -q
+3 passed
+
+uv run pytest tests/test_interaction_gates.py tests/test_interaction_resume.py tests/test_graph_guided_confirmation.py tests/test_graph_supervisor_planner.py -q
+26 passed
+
+uv run pytest tests/test_cli.py -q
+16 passed
+
+uv run pytest tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_guided_confirmation.py -q
+15 passed
 
 uv run pytest tests/test_graph_auto_draft.py tests/test_evidence_reasoning.py tests/test_cli.py -q
 33 passed

@@ -4,7 +4,11 @@ import json
 import logging
 from typing import Any, Protocol
 
-from pwps_agent.agent.prompt_loader import load_domain_skill, load_domain_skill_bundle
+from pwps_agent.agent.prompt_loader import (
+    load_domain_skill,
+    load_domain_skill_bundle,
+    load_prompt,
+)
 from pwps_agent.core.contracts import AgentAction
 from pwps_agent.core.state import PWPSState
 from pwps_agent.graph.policy import (
@@ -67,9 +71,7 @@ class LLMSupervisorPlanner:
         domain_context = load_domain_skill_bundle(skill_names)
         return "\n\n".join(
             [
-                "You are the LLM Supervisor for a first-stage pWPS draft system.",
-                "Choose exactly one next AgentAction. Do not execute tools yourself.",
-                "Preserve uncertainty. Do not invent project metadata. Never claim formal approval or compliance.",
+                load_prompt("supervisor"),
                 self._mode_instruction(state),
                 domain_context,
             ]
@@ -120,25 +122,10 @@ class LLMSupervisorPlanner:
 
     def _mode_instruction(self, state: PWPSState) -> str:
         if state.interaction_mode == "guided_confirmation":
-            return (
-                "Interaction mode is guided_confirmation: ask the user when critical "
-                "information is missing or fields need confirmation. Present concise "
-                "options, explain the tradeoff/evidence for each option, and keep "
-                "iterating until no candidate, suggested, conflict, or explicit "
-                "candidate-option fields remain."
-            )
+            return load_prompt("supervisor_mode_guided_confirmation")
         if state.interaction_mode == "auto_draft":
-            return (
-                "Interaction mode is auto_draft: do not ask the user. Act as the "
-                "autonomous drafter, use configured local/web knowledge sources, use "
-                "model fallback only as suggested low-confidence values, and complete "
-                "the draft with uncertainty clearly marked."
-            )
-        return (
-            "Interaction mode is supplement_update: apply the supplemental user "
-            "information, regenerate affected draft/report artifacts, and preserve "
-            "source and confirmation status."
-        )
+            return load_prompt("supervisor_mode_auto_draft")
+        return load_prompt("supervisor_mode_supplement_update")
 
 
 def supervisor_node(graph_state: GraphState) -> dict:

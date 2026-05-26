@@ -57,6 +57,7 @@ class GraphPolicy:
             return (
                 AgentAction(
                     action_type="ASK_USER",
+                    tool_args={"interaction_purpose": "initial_minimum_context"},
                     rationale_summary=(
                         "Auto-draft requires minimum core information before retrieval starts: "
                         + ", ".join(missing)
@@ -75,6 +76,7 @@ class GraphPolicy:
                 return (
                     AgentAction(
                         action_type="ASK_USER",
+                        tool_args={"interaction_purpose": "guided_field_confirmation"},
                         rationale_summary="Draft artifacts are composed and fields still need guided confirmation.",
                         expected_state_change="Pause with grouped confirmation view.",
                     ),
@@ -136,6 +138,7 @@ class GraphPolicy:
             return (
                 AgentAction(
                     action_type="ASK_USER",
+                    tool_args={"interaction_purpose": "guided_field_confirmation"},
                     rationale_summary="Verifier found fields that need guided human review.",
                     expected_state_change="Pause with grouped confirmation view.",
                 ),
@@ -154,6 +157,27 @@ class GraphPolicy:
                 ),
                 "guided_confirmation_required",
                 "Guided confirmation needs option recommendations before pausing.",
+            )
+        if (
+            state.interaction_mode == "guided_confirmation"
+            and action.action_type == "ASK_USER"
+            and not _has_pending_confirmation_fields(state)
+        ):
+            return (
+                plan_next_auto_draft_action(state, self.knowledge_sources),
+                "guided_confirmation_empty",
+                "Guided confirmation cannot pause before candidate or missing fields exist.",
+            )
+        if (
+            state.interaction_mode == "guided_confirmation"
+            and action.action_type == "CALL_TOOL"
+            and action.tool_name == "guided_options"
+            and not _needs_guided_options(state)
+        ):
+            return (
+                plan_next_auto_draft_action(state, self.knowledge_sources),
+                "guided_confirmation_empty",
+                "Guided options require candidate, missing, or confirmation fields first.",
             )
         if (
             _node_completed(state, "draft_verifier")
@@ -292,6 +316,7 @@ def plan_next_auto_draft_action(
     ):
         return AgentAction(
             action_type="ASK_USER",
+            tool_args={"interaction_purpose": "guided_field_confirmation"},
             rationale_summary="Fields need guided human review.",
             expected_state_change="Pause with grouped confirmation view.",
         )

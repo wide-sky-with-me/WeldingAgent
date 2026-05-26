@@ -56,6 +56,11 @@ class EmptyPlanningClient:
         return {"queries": []}
 
 
+class FailingPlanningClient:
+    def complete_json(self, system_prompt: str, user_prompt: str) -> dict:
+        raise ValueError("structured output parser failed")
+
+
 def test_plan_knowledge_queries_has_targeted_fallback_when_model_returns_empty() -> None:
     state = create_initial_state("Q355B GMAW plate", "auto_draft")
     state.core_fields.update(
@@ -73,6 +78,24 @@ def test_plan_knowledge_queries_has_targeted_fallback_when_model_returns_empty()
     assert "Q355B" in queries[0]["query_text"]
     assert "GMAW" in queries[0]["query_text"]
     assert queries[0]["target_fields"]
+
+
+def test_plan_knowledge_queries_falls_back_when_structured_output_fails() -> None:
+    state = create_initial_state("Q355B 12mm plate GMAW", "auto_draft")
+    state.core_fields.update(
+        {
+            "base_material": "Q355B",
+            "thickness": "12mm",
+            "welding_process": "GMAW",
+            "workpiece_type": "plate",
+        }
+    )
+
+    result = plan_knowledge_queries(state, FailingPlanningClient())
+
+    assert result.success is True
+    assert result.state_patch["knowledge_queries"][0]["context"]["fallback"] is True
+    assert result.errors == ["structured output parser failed"]
 
 
 def test_knowledge_planning_prompt_includes_quality_refinement_context() -> None:

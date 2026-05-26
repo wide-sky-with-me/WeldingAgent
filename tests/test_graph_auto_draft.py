@@ -21,12 +21,18 @@ class StaticRequirementTool:
                 "core_fields": {
                     "base_material": "Q355B",
                     "thickness": "12mm",
+                    "workpiece_type": "plate",
                     "welding_process": "GMAW",
+                    "joint_type": "butt joint",
+                    "welding_position": "flat",
                 },
                 "fields": {
                     "base_material": {"value": "Q355B", "status": "filled"},
                     "thickness": {"value": "12mm", "status": "filled"},
+                    "workpiece_type": {"value": "plate", "status": "filled"},
                     "welding_process": {"value": "GMAW", "status": "filled"},
+                    "joint_type": {"value": "butt joint", "status": "filled"},
+                    "welding_position": {"value": "flat", "status": "filled"},
                 },
             },
             summary="understood requirement",

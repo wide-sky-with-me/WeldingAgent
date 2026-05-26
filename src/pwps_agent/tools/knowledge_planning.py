@@ -58,13 +58,18 @@ class KnowledgePlanningOutput(BaseModel):
 
 
 def plan_knowledge_queries(state: PWPSState, client: Any) -> ToolResult:
-    output = complete_structured(
-        client=client,
-        system_prompt=load_prompt("knowledge_planning"),
-        user_prompt=_user_prompt(state),
-        schema=KnowledgePlanningOutput,
-    )
-    queries = _normalize_queries([query.model_dump() for query in output.queries])
+    errors: list[str] = []
+    try:
+        output = complete_structured(
+            client=client,
+            system_prompt=load_prompt("knowledge_planning"),
+            user_prompt=_user_prompt(state),
+            schema=KnowledgePlanningOutput,
+        )
+        queries = _normalize_queries([query.model_dump() for query in output.queries])
+    except Exception as exc:  # noqa: BLE001 - keep graph running on provider parser failures
+        errors = [str(exc)]
+        queries = []
     if not queries:
         queries = [_fallback_query(state)]
 
@@ -72,6 +77,7 @@ def plan_knowledge_queries(state: PWPSState, client: Any) -> ToolResult:
         tool_name="knowledge_planning",
         success=True,
         state_patch={"knowledge_queries": queries},
+        errors=errors,
         summary=f"Planned {len(queries)} knowledge queries.",
     )
 
@@ -168,6 +174,5 @@ def _user_prompt(state: PWPSState) -> str:
             f"quality_critical_missing_fields: {quality_report.get('critical_missing_fields', [])}",
             f"quality_weak_evidence_fields: {quality_report.get('weak_evidence_fields', [])}",
             f"previous_query_texts: {previous_queries}",
-            "Plan 1-3 targeted queries. Each query should explain which missing fields it supports.",
         ]
     )

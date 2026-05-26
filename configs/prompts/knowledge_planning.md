@@ -48,6 +48,9 @@ For each planned query, include:
 - why it is useful
 - what evidence would make it successful
 
+Plan 1-3 targeted queries. Each query should explain which missing fields it
+supports.
+
 ## Example
 
 - Query: "Q355B GMAW flat butt joint AWS D1.1 filler metal"

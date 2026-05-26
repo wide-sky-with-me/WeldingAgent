@@ -1,4 +1,5 @@
 from pathlib import Path
+import inspect
 
 from pwps_agent.config import Settings
 from pwps_agent.core.contracts import AgentAction, SearchResult, ToolResult
@@ -417,6 +418,58 @@ def test_graph_policy_resolves_guided_confirmation_required_with_reason_code():
     assert decision.action.action_type == "ASK_USER"
 
 
+def test_graph_policy_prevents_empty_guided_confirmation_pause():
+    state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation")
+    state.trace.append({"node": "requirement_understanding", "event_type": "tool_result"})
+    for field_id, value in {
+        "applicable_standard": "AWS D1.1",
+        "base_material": "Q355B",
+        "thickness": "12mm",
+        "workpiece_type": "plate",
+        "welding_process": "GMAW",
+        "joint_type": "butt joint",
+        "welding_position": "flat",
+    }.items():
+        state.fields[field_id].value = value
+        state.fields[field_id].status = "filled"
+    action = AgentAction(action_type="ASK_USER", rationale_summary="ask too early")
+
+    decision = GraphPolicy().resolve(action, state)
+
+    assert decision.overridden is True
+    assert decision.reason_code == "guided_confirmation_empty"
+    assert decision.action.action_type == "CALL_TOOL"
+    assert decision.action.tool_name == "knowledge_planning"
+
+
+def test_graph_policy_prevents_empty_guided_options_tool_call():
+    state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation")
+    state.trace.append({"node": "requirement_understanding", "event_type": "tool_result"})
+    for field_id, value in {
+        "applicable_standard": "AWS D1.1",
+        "base_material": "Q355B",
+        "thickness": "12mm",
+        "workpiece_type": "plate",
+        "welding_process": "GMAW",
+        "joint_type": "butt joint",
+        "welding_position": "flat",
+    }.items():
+        state.fields[field_id].value = value
+        state.fields[field_id].status = "filled"
+    action = AgentAction(
+        action_type="CALL_TOOL",
+        tool_name="guided_options",
+        rationale_summary="recommend too early",
+    )
+
+    decision = GraphPolicy().resolve(action, state)
+
+    assert decision.overridden is True
+    assert decision.reason_code == "guided_confirmation_empty"
+    assert decision.action.action_type == "CALL_TOOL"
+    assert decision.action.tool_name == "knowledge_planning"
+
+
 def test_graph_finishes_auto_draft_when_planner_asks_user_after_compose(tmp_path: Path):
     state = create_initial_state(
         "Q355B 12mm plate GMAW butt joint flat AWS D1.1 pWPS draft",
@@ -580,6 +633,14 @@ def test_llm_supervisor_planner_describes_mode_specific_closure_rules():
     assert "ask the user" in guided_prompt
     assert "options" in guided_prompt
     assert "Domain Skill: pwps_guided_confirmation" in guided_prompt
+
+
+def test_llm_supervisor_planner_loads_production_prompt_text_from_prompt_files():
+    source = inspect.getsource(LLMSupervisorPlanner._system_prompt)
+
+    assert 'load_prompt("supervisor")' in source
+    assert "You are the LLM Supervisor" not in source
+    assert "Interaction mode is auto_draft" not in source
 
 
 def test_llm_supervisor_planner_uses_active_domain_skill_context():

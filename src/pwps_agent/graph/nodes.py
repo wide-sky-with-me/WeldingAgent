@@ -5,6 +5,11 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from pwps_agent.agent.prompt_loader import load_domain_skill
 from pwps_agent.core.contracts import SearchResult
+from pwps_agent.core.interaction import (
+    attach_interaction_request,
+    build_guided_confirmation_request,
+    build_initial_info_request,
+)
 from pwps_agent.core.modes import apply_supplement, build_confirmation_view
 from pwps_agent.core.state_merge import merge_state_patch as _merge_state_patch
 from pwps_agent.graph.checkpoints import save_checkpoint
@@ -394,13 +399,26 @@ def ask_user_node(graph_state: GraphState) -> dict:
     state = graph_state["pwps_state"].model_copy(deep=True)
     context = graph_state["context"]
     confirmation_view = build_confirmation_view(state)
+    if state.interaction_mode == "auto_draft":
+        interaction_request = build_initial_info_request(state)
+        summary = "Paused for initial minimum welding context."
+    else:
+        interaction_request = build_guided_confirmation_request(
+            state,
+            confirmation_view,
+        )
+        summary = "Paused for guided field confirmation."
+    attach_interaction_request(state, interaction_request)
     state.status = "need_user_input"
     _append_trace(
         state,
         "ask_user",
         "user_input_required",
-        "Paused for guided field confirmation.",
-        {"confirmation_view": confirmation_view},
+        summary,
+        {
+            "interaction_request": interaction_request.model_dump(),
+            "confirmation_view": confirmation_view,
+        },
     )
     state.field_report = state.field_report or render_field_report(state)
     persist_run_artifacts(

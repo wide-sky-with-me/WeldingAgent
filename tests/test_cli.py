@@ -181,6 +181,29 @@ def test_cli_parser_accepts_supplement_commands(tmp_path: Path) -> None:
     assert run_args.run_id == "supplement_run"
 
 
+def test_cli_parser_accepts_generic_interaction_resume(tmp_path: Path) -> None:
+    parser = build_parser()
+    state_path = tmp_path / "pwps.json"
+
+    args = parser.parse_args(
+        [
+            "interaction-resume",
+            str(state_path),
+            "--set",
+            "base_material=Q355B",
+            "--message",
+            "Initial context.",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert args.command == "interaction-resume"
+    assert args.state_path == state_path
+    assert args.set_values == ["base_material=Q355B"]
+    assert args.output_dir == tmp_path
+
+
 def test_cli_guided_confirmation_resume_writes_artifacts(tmp_path: Path, capsys) -> None:
     state_path = tmp_path / "state.json"
     state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation", run_id="cli_resume")

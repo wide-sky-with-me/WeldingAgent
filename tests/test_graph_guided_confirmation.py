@@ -121,6 +121,14 @@ def test_ask_user_node_pauses_with_confirmation_view(tmp_path: Path) -> None:
     state = create_initial_state("Q355B 12mm GMAW", "guided_confirmation")
     state.fields["filler_material"].value = "ER50-6"
     state.fields["filler_material"].status = "candidate"
+    state.fields["filler_material"].candidates = [
+        {
+            "value": "ER50-6",
+            "suitability": "Common GMAW filler candidate from current evidence.",
+            "risk_note": "Confirm project filler classification before promotion.",
+            "recommended": True,
+        }
+    ]
 
     result = ask_user_node({"pwps_state": state, "context": _context(tmp_path)})
 
@@ -128,6 +136,33 @@ def test_ask_user_node_pauses_with_confirmation_view(tmp_path: Path) -> None:
     assert next_state.status == "need_user_input"
     assert next_state.trace[-1]["node"] == "ask_user"
     assert next_state.trace[-1]["payload"]["confirmation_view"]["groups"]
+    interaction_request = next_state.trace[-1]["payload"]["interaction_request"]
+    assert interaction_request["purpose"] == "guided_field_confirmation"
+    assert interaction_request["transport_neutral"] is True
+    assert any(
+        option["recommended"]
+        for question in interaction_request["questions"]
+        for option in question["options"]
+    )
+
+
+def test_ask_user_node_pauses_auto_draft_for_initial_context(tmp_path: Path) -> None:
+    state = create_initial_state("Need a pWPS draft", "auto_draft")
+
+    result = ask_user_node({"pwps_state": state, "context": _context(tmp_path)})
+
+    next_state = result["pwps_state"]
+    interaction_request = next_state.pending_interaction
+    assert next_state.status == "need_user_input"
+    assert interaction_request["purpose"] == "initial_minimum_context"
+    assert interaction_request["questions"][0]["field_ids"] == [
+        "base_material",
+        "thickness",
+        "workpiece_type",
+        "welding_process",
+        "joint_type",
+        "welding_position",
+    ]
 
 
 def test_graph_can_pause_on_injected_ask_user_action(tmp_path: Path) -> None:

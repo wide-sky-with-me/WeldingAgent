@@ -379,3 +379,171 @@ guided final result: status=done; user_confirmed=12; no candidate/suggested/need
 - [x] Implement Task 4 guided option recommendation.
 - [x] Implement Task 5 Supervisor policy split.
 - [x] Implement Task 6 agent eval metrics.
+
+## Task 7: Runtime Interaction Request Protocol
+
+**Goal:** Align both product modes with the intended model: interactions happen
+inside the graph as runtime pauses, while terminal, Web, or API inputs are only
+transport adapters.
+
+**Files:**
+- Modify: `src/pwps_agent/core/interaction.py`
+- Modify: `src/pwps_agent/core/state.py`
+- Modify: `src/pwps_agent/graph/nodes.py`
+- Modify: `src/pwps_agent/graph/policy.py`
+- Modify: `src/pwps_agent/graph/supervisor.py`
+- Modify: `src/pwps_agent/domain_skills/pwps_auto_draft.md`
+- Modify: `src/pwps_agent/domain_skills/pwps_guided_confirmation.md`
+- Create: `src/pwps_agent/workflows/interaction_resume.py`
+- Modify: `src/pwps_agent/cli.py`
+- Modify: `tests/test_interaction_gates.py`
+- Modify: `tests/test_graph_guided_confirmation.py`
+- Create: `tests/test_interaction_resume.py`
+- Modify: `tests/test_cli.py`
+
+- [x] Add transport-neutral `InteractionRequest`, `InteractionQuestion`, and
+  `InteractionOption` contracts for graph pauses.
+- [x] Store `pending_interaction` and `interaction_requests` on `PWPSState` so
+  important interaction state is not only present in trace text.
+- [x] Make `ask_user_node` attach an `interaction_request` payload for both
+  `auto_draft` initial information pauses and `guided_confirmation` field
+  confirmation pauses.
+- [x] Preserve the distinction between modes: `auto_draft` only asks for missing
+  minimum startup fields; `guided_confirmation` asks for recommended field
+  choices and explicit confirmation.
+- [x] Keep the `auto_draft` initial gate active after `requirement_understanding`
+  if minimum fields are still missing, but stop asking once retrieval,
+  reasoning, verification, or composition has started.
+- [x] Add generic `apply_interaction_payload()` / `resume_interaction()` so CLI,
+  Web, or API adapters can resume the same graph pause shape.
+- [x] Ensure generic `interaction-resume` builds the same real runtime
+  dependencies as normal draft runs when dependencies are not injected.
+- [x] Add `pwps-agent interaction-resume` as the terminal adapter for the generic
+  interaction protocol.
+
+Focused verification during implementation:
+
+```bash
+uv run pytest tests/test_interaction_gates.py::test_initial_info_request_is_transport_neutral_runtime_payload -q
+1 passed
+
+uv run pytest tests/test_graph_guided_confirmation.py::test_ask_user_node_pauses_with_confirmation_view -q
+1 passed
+
+uv run pytest tests/test_graph_guided_confirmation.py::test_ask_user_node_pauses_auto_draft_for_initial_context -q
+1 passed
+
+uv run pytest tests/test_interaction_resume.py -q
+1 passed
+
+uv run pytest tests/test_cli.py::test_cli_parser_accepts_generic_interaction_resume -q
+1 passed
+
+uv run pytest tests/test_interaction_gates.py tests/test_interaction_resume.py tests/test_graph_guided_confirmation.py tests/test_graph_supervisor_planner.py -q
+26 passed
+
+uv run pytest tests/test_cli.py -q
+16 passed
+
+uv run pytest tests/test_guided_confirmation_resume.py tests/test_guided_confirmation_web.py tests/test_guided_confirmation.py -q
+15 passed
+
+uv run pytest tests/test_interaction_gates.py tests/test_graph_auto_draft.py tests/test_graph_supervisor_planner.py -q
+35 passed
+
+uv run pytest tests/test_interaction_resume.py tests/test_cli.py::test_cli_parser_accepts_generic_interaction_resume -q
+3 passed
+```
+
+## Task 8: Prompt Centralization Cleanup
+
+**Goal:** Keep production LLM prompt text centralized and documented. Runtime
+code can still assemble structured state payloads, but model role, task
+boundary, mode behavior, safety language, and output expectations should live in
+`configs/prompts/` or Domain Skill markdown.
+
+**Files:**
+- Create: `configs/prompts/README.md`
+- Create: `configs/prompts/supervisor.md`
+- Create: `configs/prompts/supervisor_mode_auto_draft.md`
+- Create: `configs/prompts/supervisor_mode_guided_confirmation.md`
+- Create: `configs/prompts/supervisor_mode_supplement_update.md`
+- Modify: `configs/prompts/knowledge_planning.md`
+- Modify: `src/pwps_agent/graph/supervisor.py`
+- Modify: `src/pwps_agent/tools/knowledge_planning.py`
+- Modify: `tests/test_domain_skills.py`
+- Modify: `tests/test_graph_supervisor_planner.py`
+
+- [x] Add a prompt registry README explaining ownership, file purpose, and the
+  boundary between centralized prompt text and runtime state payloads.
+- [x] Move Supervisor base prompt and mode-specific prompt text out of
+  `graph/supervisor.py` and into `configs/prompts/`.
+- [x] Keep `LLMSupervisorPlanner` responsible for assembling loaded prompt
+  files, mode prompt, and Domain Skill context.
+- [x] Move the remaining knowledge-planning instruction sentence from the
+  runtime user-payload builder into `configs/prompts/knowledge_planning.md`.
+- [x] Add tests proving Supervisor prompt files load and production Supervisor
+  prompt text is not hardcoded in `_system_prompt()`.
+
+Focused verification during implementation:
+
+```bash
+uv run pytest tests/test_domain_skills.py::test_supervisor_prompts_are_loaded_from_prompt_directory tests/test_graph_supervisor_planner.py::test_llm_supervisor_planner_loads_production_prompt_text_from_prompt_files tests/test_graph_supervisor_planner.py::test_llm_supervisor_planner_describes_mode_specific_closure_rules -q
+3 passed
+```
+
+## Task 9: Live Remote Structured Output Robustness
+
+**Goal:** Keep real remote-provider structured-output parser failures from
+ending an otherwise recoverable draft run when a safe deterministic fallback is
+available.
+
+**Files:**
+- Modify: `src/pwps_agent/tools/knowledge_planning.py`
+- Modify: `tests/test_knowledge_planning.py`
+
+- [x] Catch structured-output/provider parser exceptions in
+  `plan_knowledge_queries()`.
+- [x] Fall back to the existing targeted fallback query and preserve the parser
+  error in `ToolResult.errors` for trace/debugging.
+- [x] Add regression coverage for the parser-failure fallback path.
+
+Focused verification:
+
+```bash
+uv run pytest tests/test_knowledge_planning.py tests/test_interaction_resume.py -q
+6 passed
+
+uv run pytest -q
+168 passed
+```
+
+## Task 10: Guided Mode Empty-Pause Guard
+
+**Goal:** Prevent the LLM Supervisor from pausing guided-confirmation runs before
+the agent has gathered candidates, missing-field targets, or confirmation
+content to show the user.
+
+**Files:**
+- Modify: `src/pwps_agent/graph/policy.py`
+- Modify: `tests/test_graph_supervisor_planner.py`
+
+- [x] Override premature guided `ASK_USER` actions when no pending confirmation
+  fields exist.
+- [x] Override premature `guided_options` tool calls when there are no missing,
+  candidate, conflicting, or confirmation-required fields to build options from.
+- [x] Route both cases back to the safe next graph action, normally
+  `knowledge_planning` after requirement understanding.
+
+Focused verification:
+
+```bash
+uv run pytest tests/test_graph_supervisor_planner.py::test_graph_policy_prevents_empty_guided_confirmation_pause tests/test_graph_supervisor_planner.py::test_graph_policy_prevents_empty_guided_options_tool_call -q
+2 passed
+
+uv run pytest tests/test_graph_supervisor_planner.py tests/test_graph_guided_confirmation.py tests/test_guided_confirmation_resume.py -q
+30 passed
+
+uv run pytest -q
+170 passed
+```

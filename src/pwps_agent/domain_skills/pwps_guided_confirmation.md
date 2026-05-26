@@ -14,6 +14,8 @@ promote only explicit user choices to confirmed fields.
 - Make the tradeoff, evidence, and risk visible for each group.
 - Present recommended options before asking for confirmation when key fields are
   missing, weak, conflicting, or have multiple candidates.
+- Use the runtime `ASK_USER` node as the interaction boundary. Terminal, Web,
+  and API input are transport adapters for the same interaction request.
 - Record only explicit user confirmations as confirmed state.
 
 ## Confirmation Pattern

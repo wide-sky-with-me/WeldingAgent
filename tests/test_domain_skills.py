@@ -46,3 +46,13 @@ def test_prompt_and_skill_loading_do_not_depend_on_current_working_directory(
     assert "welding requirement" in prompt.lower()
     assert skill.name == "pwps_auto_draft"
     assert "Domain Skill" in skill.content
+
+
+def test_supervisor_prompts_are_loaded_from_prompt_directory() -> None:
+    base_prompt = load_prompt("supervisor")
+    auto_mode_prompt = load_prompt("supervisor_mode_auto_draft")
+    guided_mode_prompt = load_prompt("supervisor_mode_guided_confirmation")
+
+    assert "LLM Supervisor" in base_prompt
+    assert "do not ask the user except" in auto_mode_prompt
+    assert "ask the user" in guided_mode_prompt

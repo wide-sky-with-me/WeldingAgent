@@ -32,6 +32,8 @@ class PWPSState(BaseModel):
     quality_report: dict[str, Any] | None = None
     refinement_attempts: Annotated[int, Field(ge=0, strict=True)] = 0
     max_refinement_attempts: Annotated[int, Field(ge=1, strict=True)] = 2
+    interaction_requests: list[dict[str, Any]] = Field(default_factory=list)
+    pending_interaction: dict[str, Any] | None = None
     clarification_questions: list[dict] = Field(default_factory=list)
     risks: list[dict] = Field(default_factory=list)
     trace: list[dict] = Field(default_factory=list)

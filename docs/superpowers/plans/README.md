@@ -6,7 +6,7 @@ This directory contains active and completed implementation plans from Stage One
 
 | Plan | Status | Purpose |
 | --- | --- | --- |
-| `2026-05-25-llm-led-dual-mode-hardening.md` | IN PROGRESS | Harden the LLM-led `auto_draft` and `guided_confirmation` modes with initial interaction gates, publishability semantics, evidence policy, guided option recommendations, Supervisor policy extraction, and agent eval metrics. |
+| `2026-05-25-llm-led-dual-mode-hardening.md` | IN PROGRESS | Harden the LLM-led `auto_draft` and `guided_confirmation` modes with runtime interaction requests, initial interaction gates, publishability semantics, evidence policy, guided option recommendations, Supervisor policy extraction, and agent eval metrics. |
 
 ## Completed Plan Archive
 

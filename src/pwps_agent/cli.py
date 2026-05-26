@@ -18,6 +18,7 @@ from pwps_agent.workflows.guided_confirmation import (
     resume_guided_confirmation,
     resume_guided_confirmation_from_checkpoint,
 )
+from pwps_agent.workflows.interaction_resume import resume_interaction
 from pwps_agent.workflows.supplement_update import (
     resume_supplement_update,
     resume_supplement_update_from_checkpoint,
@@ -78,6 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
     guided_confirm_web.add_argument("state_path", type=Path)
     guided_confirm_web.add_argument("--host", default="127.0.0.1")
     guided_confirm_web.add_argument("--port", type=int, default=8765)
+
+    interaction_resume = subparsers.add_parser("interaction-resume")
+    interaction_resume.add_argument("state_path", type=Path)
+    interaction_resume.add_argument("--set", dest="set_values", action="append", default=[])
+    interaction_resume.add_argument("--message", default="User runtime interaction response.")
+    interaction_resume.add_argument("--reason", default=None)
+    interaction_resume.add_argument("--evidence-id", dest="evidence_ids", action="append", default=[])
+    interaction_resume.add_argument("--output-dir", type=Path, default=None)
 
     supplement_state = subparsers.add_parser("supplement-state")
     supplement_state.add_argument("state_path", type=Path)
@@ -294,6 +303,30 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"pwps-agent: {exc}", file=sys.stderr)
             return 1
+
+    if args.command == "interaction-resume":
+        settings = load_settings()
+        if args.output_dir is not None:
+            settings.paths.output_dir = args.output_dir
+        try:
+            state = load_state(args.state_path)
+            result = resume_interaction(
+                state,
+                {
+                    "fields": _parse_set_values(args.set_values),
+                    "message": args.message,
+                    "reason": args.reason,
+                    "evidence_ids_shown": args.evidence_ids,
+                    "action": "accepted",
+                },
+                settings=settings,
+            )
+            save_state(args.state_path, result.state)
+        except Exception as exc:
+            print(f"pwps-agent: {exc}", file=sys.stderr)
+            return 1
+        print(result.output_dir)
+        return 0
 
     if args.command == "supplement-state":
         settings = load_settings()
