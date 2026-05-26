@@ -224,6 +224,86 @@ def test_duplicate_exact_option_label_or_value_remains_unresolved():
     assert payload["unresolved_text"] == "not required"
 
 
+def test_digit_text_prefers_exact_option_value_over_numeric_index():
+    interaction = InteractionRequest(
+        request_id="run1:guided_field_confirmation:4",
+        interaction_mode="guided_confirmation",
+        purpose="guided_field_confirmation",
+        title="Confirm filler material",
+        summary="Choose a candidate.",
+        questions=[
+            InteractionQuestion(
+                question_id="confirm_filler_material",
+                field_ids=["filler_material"],
+                prompt="Confirm filler material.",
+                input_kind="single_choice",
+                options=[
+                    InteractionOption(
+                        value="2",
+                        label="2",
+                        field_updates={"filler_material": "2"},
+                    ),
+                    InteractionOption(
+                        value="ER50-6",
+                        label="ER50-6 solid wire",
+                        field_updates={"filler_material": "ER50-6"},
+                    ),
+                ],
+            )
+        ],
+    ).model_dump()
+
+    payload = normalize_interaction_response(interaction, "2")
+
+    assert payload["fields"] == {"filler_material": "2"}
+    assert payload["selected_options"][0]["option_index"] == 1
+    assert payload["unresolved_text"] == ""
+
+
+def test_duplicate_digit_exact_option_value_remains_unresolved():
+    interaction = InteractionRequest(
+        request_id="run1:guided_field_confirmation:5",
+        interaction_mode="guided_confirmation",
+        purpose="guided_field_confirmation",
+        title="Confirm numbered choices",
+        summary="Choose candidates.",
+        questions=[
+            InteractionQuestion(
+                question_id="confirm_preheat_temperature",
+                field_ids=["preheat_temperature"],
+                prompt="Confirm preheat.",
+                input_kind="single_choice",
+                options=[
+                    InteractionOption(
+                        value="2",
+                        label="2",
+                        field_updates={"preheat_temperature": "2"},
+                    )
+                ],
+            ),
+            InteractionQuestion(
+                question_id="confirm_pwht",
+                field_ids=["pwht"],
+                prompt="Confirm PWHT.",
+                input_kind="single_choice",
+                options=[
+                    InteractionOption(
+                        value="2",
+                        label="2",
+                        field_updates={"pwht": "2"},
+                    )
+                ],
+            ),
+        ],
+    ).model_dump()
+
+    payload = normalize_interaction_response(interaction, "2")
+
+    assert payload["fields"] == {}
+    assert payload["selected_options"] == []
+    assert payload["unresolved_text"] == "2"
+
+
 def test_free_form_text_remains_unresolved_without_fields():
     payload = normalize_interaction_response(
         _guided_interaction(),

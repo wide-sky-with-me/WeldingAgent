@@ -109,6 +109,13 @@ def _match_option(
     interaction: dict,
     raw_text: str,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]] | None:
+    exact_matches = _exact_option_matches(interaction, raw_text)
+    if len(exact_matches) == 1:
+        question, option, index = exact_matches[0]
+        return _selection(question, option, index)
+    if len(exact_matches) > 1:
+        return None
+
     if raw_text.isdigit():
         target_index = int(raw_text)
         questions_with_options = [
@@ -124,6 +131,13 @@ def _match_option(
             return _selection(question, options[target_index - 1], target_index)
         return None
 
+    return None
+
+
+def _exact_option_matches(
+    interaction: dict,
+    raw_text: str,
+) -> list[tuple[dict[str, Any], dict[str, Any], int]]:
     matches: list[tuple[dict[str, Any], dict[str, Any], int]] = []
     for question in _questions(interaction):
         for index, option in enumerate(question.get("options") or [], start=1):
@@ -133,10 +147,7 @@ def _match_option(
             label_matches = label is not None and raw_text == str(label)
             if value_matches or label_matches:
                 matches.append((question, option, index))
-    if len(matches) != 1:
-        return None
-    question, option, index = matches[0]
-    return _selection(question, option, index)
+    return matches
 
 
 def _selection(
