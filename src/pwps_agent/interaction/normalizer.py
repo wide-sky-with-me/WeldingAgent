@@ -22,7 +22,7 @@ def normalize_interaction_response(
             message=message,
             reason="explicit_fields",
             evidence_ids_shown=[],
-            action="submit_fields",
+            action="modified",
             unresolved_text="",
         )
 
@@ -35,7 +35,7 @@ def normalize_interaction_response(
             message=message,
             reason="parsed_field_pairs",
             evidence_ids_shown=[],
-            action="submit_fields",
+            action="modified",
             unresolved_text="",
         )
 
@@ -49,7 +49,7 @@ def normalize_interaction_response(
             message=message,
             reason="matched_option",
             evidence_ids_shown=evidence_ids,
-            action="select_option",
+            action="accepted",
             unresolved_text="",
         )
 
@@ -60,7 +60,7 @@ def normalize_interaction_response(
         message=message,
         reason="unresolved_free_text",
         evidence_ids_shown=[],
-        action="free_text",
+        action="modified",
         unresolved_text=message,
     )
 
@@ -111,10 +111,17 @@ def _match_option(
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]] | None:
     if raw_text.isdigit():
         target_index = int(raw_text)
-        for question in _questions(interaction):
-            options = list(question.get("options") or [])
-            if 1 <= target_index <= len(options):
-                return _selection(question, options[target_index - 1], target_index)
+        questions_with_options = [
+            question
+            for question in _questions(interaction)
+            if question.get("options")
+        ]
+        if len(questions_with_options) != 1:
+            return None
+        question = questions_with_options[0]
+        options = list(question.get("options") or [])
+        if 1 <= target_index <= len(options):
+            return _selection(question, options[target_index - 1], target_index)
         return None
 
     for question in _questions(interaction):
